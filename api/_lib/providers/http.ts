@@ -127,12 +127,21 @@ export async function* parseSseStream(response: Response, endpoint: string): Asy
   const parseBlock = (block: string) => {
     let event: string | undefined
     const data: string[] = []
-    for (const line of block.split('\n')) {
+    for (const line of block.split(/\r\n|\r|\n/)) {
       if (!line || line.startsWith(':')) continue
       if (line.startsWith('event:')) event = line.slice(6).trim()
       if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''))
     }
     return data.length ? { event, data: data.join('\n') } : undefined
+  }
+
+  const nextBoundary = (value: string) => {
+    const candidates = [
+      { index: value.indexOf('\r\n\r\n'), length: 4 },
+      { index: value.indexOf('\n\n'), length: 2 },
+      { index: value.indexOf('\r\r'), length: 2 },
+    ].filter((candidate) => candidate.index >= 0)
+    return candidates.sort((left, right) => left.index - right.index)[0]
   }
 
   try {
@@ -141,14 +150,16 @@ export async function* parseSseStream(response: Response, endpoint: string): Asy
       if (done) break
       total += value.byteLength
       if (total > maxBytes) throw new ProviderRequestError({ message: 'تجاوز البث الحد الآمن', code: 'response_too_large', status: response.status, endpoint: sanitizeProviderEndpoint(endpoint) })
-      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
-      let boundary = buffer.indexOf('\n\n')
-      while (boundary !== -1) {
-        const block = buffer.slice(0, boundary)
-        buffer = buffer.slice(boundary + 2)
+      // Keep raw line endings in the buffer. CRLF can itself be split across
+      // network packets, so normalizing each packet independently is unsafe.
+      buffer += decoder.decode(value, { stream: true })
+      let boundary = nextBoundary(buffer)
+      while (boundary) {
+        const block = buffer.slice(0, boundary.index)
+        buffer = buffer.slice(boundary.index + boundary.length)
         const parsed = parseBlock(block)
         if (parsed) yield parsed
-        boundary = buffer.indexOf('\n\n')
+        boundary = nextBoundary(buffer)
       }
     }
     buffer += decoder.decode()

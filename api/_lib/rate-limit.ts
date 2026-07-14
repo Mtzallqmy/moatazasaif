@@ -14,10 +14,58 @@ interface MemoryBucket { count: number; resetAt: number }
 const sessionBuckets = new Map<string, MemoryBucket>()
 const sessionFingerprintSalt = randomBytes(32)
 
+function distributedSessionRateLimitAvailable() {
+  const hasUrl = Boolean(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)
+  const hasPublishableKey = Boolean(
+    process.env.SUPABASE_PUBLISHABLE_KEY
+    || process.env.SUPABASE_ANON_KEY
+    || process.env.VITE_SUPABASE_PUBLISHABLE_KEY
+    || process.env.VITE_SUPABASE_ANON_KEY,
+  )
+  return hasUrl && hasPublishableKey && Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+}
+
+export function sessionRateLimitFingerprints(action: string, ip: string, fingerprintParts: string[]) {
+  // ENCRYPTION_KEY is already required in the persisted production mode and
+  // gives serverless instances a stable HMAC salt. The random fallback keeps
+  // the Supabase-free local/session mode from persisting raw identifiers.
+  const salt = process.env.ENCRYPTION_KEY || sessionFingerprintSalt
+  return [
+    createHmac('sha256', salt).update([action, ip].join('\u001f')).digest('hex'),
+    createHmac('sha256', salt).update([action, ip, ...fingerprintParts].join('\u001f')).digest('hex'),
+  ]
+}
+
+async function enforceDistributedSessionLimit(action: string, limit: number, windowSeconds: number, fingerprints: string[]) {
+  let strictest: { allowed: boolean; remaining: number; reset_at: string } | undefined
+  for (const keyHash of fingerprints) {
+    const { data, error } = await getAdminClient().rpc('consume_api_rate_limit', {
+      p_key_hash: keyHash,
+      p_action: action,
+      p_limit: limit,
+      p_window_seconds: windowSeconds,
+    }).single()
+    if (error || !data) {
+      logTechnicalError('[session-rate-limit-failed]', error, { action })
+      throw new ApiError(503, 'خدمة الحماية من كثرة الطلبات غير جاهزة', 'rate_limit_unavailable')
+    }
+    const result = data as { allowed: boolean; remaining: number; reset_at: string }
+    if (!result.allowed) {
+      throw new ApiError(429, 'طلبات كثيرة جدًا. حاول مجددًا لاحقًا.', 'rate_limited', {
+        resetAt: result.reset_at,
+        remaining: result.remaining,
+      })
+    }
+    if (!strictest || result.remaining < strictest.remaining) strictest = result
+  }
+  return { allowed: true, remaining: strictest?.remaining ?? 0, resetAt: strictest?.reset_at }
+}
+
 /**
- * A Supabase-free limiter for ephemeral BYOK requests. Only an HMAC fingerprint is
- * retained in process memory; neither the IP nor the API key is stored.
- * Vercel should additionally keep its platform firewall/rate limits enabled.
+ * A limiter for ephemeral BYOK requests. Production uses the distributed
+ * Supabase counter when configured; the fully Supabase-free mode falls back to
+ * an in-process bucket. Only HMAC fingerprints are retained or transmitted.
+ * Neither the IP nor the API key is stored.
  */
 export async function enforceSessionRateLimit(
   req: VercelRequest,
@@ -32,10 +80,10 @@ export async function enforceSessionRateLimit(
   }
 
   const ip = clientIp(req)
-  const fingerprints = [
-    createHmac('sha256', sessionFingerprintSalt).update([action, ip].join('\u001f')).digest('hex'),
-    createHmac('sha256', sessionFingerprintSalt).update([action, ip, ...fingerprintParts].join('\u001f')).digest('hex'),
-  ]
+  const fingerprints = sessionRateLimitFingerprints(action, ip, fingerprintParts)
+  if (distributedSessionRateLimitAvailable()) {
+    return enforceDistributedSessionLimit(action, limit, windowSeconds, fingerprints)
+  }
   const buckets = fingerprints.map((key) => {
     const current = sessionBuckets.get(key)
     const bucket = !current || current.resetAt <= now

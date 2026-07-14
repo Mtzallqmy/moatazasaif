@@ -5,7 +5,7 @@ import { loadOwnedProviderCredentials } from '../provider-credentials.js'
 import { assertSafeProviderUrl, classifyProviderError, inferProtocol, isPrivateIpAddress, providerDiagnostic } from '../provider-runtime.js'
 import { parseSseStream } from '../providers/http.js'
 import { ApiError } from '../http.js'
-import { enforceSessionRateLimit, resetSessionRateLimitsForTests } from '../rate-limit.js'
+import { enforceSessionRateLimit, resetSessionRateLimitsForTests, sessionRateLimitFingerprints } from '../rate-limit.js'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -96,6 +96,24 @@ describe('SSE parsing and safety', () => {
     expect(events[0].data).toBe('{"content":"hello"}')
   })
 
+  it('parses CRLF SSE boundaries split across network packets', async () => {
+    process.env.NODE_ENV = 'test'
+    const chunks = ['event: delta\r', '\ndata: {"content":"A"}\r\n\r', '\nevent: done\r\ndata: {}\r\n\r\n']
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks.shift()
+        if (!chunk) { controller.close(); return }
+        controller.enqueue(new TextEncoder().encode(chunk))
+      },
+    })
+    const events: Array<{ event?: string; data: string }> = []
+    for await (const event of parseSseStream(new Response(stream), 'https://example.com/stream')) events.push(event)
+    expect(events).toEqual([
+      { event: 'delta', data: '{"content":"A"}' },
+      { event: 'done', data: '{}' },
+    ])
+  })
+
   it('does not expose secrets in a normalized diagnostic', () => {
     const diagnostic = providerDiagnostic(new Error('Authorization: Bearer sk-super-secret-value'), 'openai-compatible', Date.now())
     expect(JSON.stringify(diagnostic)).not.toContain('sk-super-secret-value')
@@ -135,5 +153,16 @@ describe('SSE parsing and safety', () => {
     await enforceSessionRateLimit(request, 'test', 1, 60, ['key-a'])
     await expect(enforceSessionRateLimit(request, 'test', 1, 60, ['key-b'])).rejects.toMatchObject({ code: 'rate_limited' })
     resetSessionRateLimitsForTests()
+  })
+
+  it('uses irreversible stable fingerprints without retaining the session key', () => {
+    process.env.ENCRYPTION_KEY = 'production-test-encryption-key-32-bytes-minimum'
+    const secret = 'provider-key-that-must-never-be-persisted'
+    const first = sessionRateLimitFingerprints('provider_test_session', '203.0.113.4', ['custom', secret])
+    const second = sessionRateLimitFingerprints('provider_test_session', '203.0.113.4', ['custom', secret])
+    expect(first).toEqual(second)
+    expect(first).toHaveLength(2)
+    expect(JSON.stringify(first)).not.toContain(secret)
+    delete process.env.ENCRYPTION_KEY
   })
 })

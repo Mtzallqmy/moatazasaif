@@ -1,0 +1,64 @@
+# قائمة تشغيل Moataz AI
+
+## 1. قاعدة البيانات
+
+1. أنشئ مشروع Supabase أو استخدم مشروعك الحالي.
+2. نفّذ `supabase/schema.sql` كاملًا في SQL Editor.
+3. للمشروع الموجود، نفّذ أيضًا `supabase/migrations/20260714190000_byok_provider_protocol.sql` (يمكن تكراره بأمان).
+4. نفّذ migration Telegram الجديدة `supabase/migrations/20260714203349_telegram_integrations.sql`.
+5. تأكد أن التنفيذ انتهى دون أخطاء.
+6. لا تمنح `authenticated` أو `anon` صلاحيات مباشرة على جداول الأسرار أو جدول `providers`؛ الإدارة تتم عبر API الخادمي فقط.
+
+## 2. متغيرات Vercel
+
+انسخ القيم المطلوبة من `.env.example`. أهم المتغيرات:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY` أو `VITE_SUPABASE_ANON_KEY` القديم
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` — خادمي فقط
+- `ENCRYPTION_KEY` — سر عشوائي ثابت بطول 32 حرفًا على الأقل
+- `APP_URL` — النطاق النهائي HTTPS الذي سيستقبل Telegram Webhook
+- `TELEGRAM_API_TIMEOUT_MS`
+- `TELEGRAM_WEBHOOK_PROCESSING_TIMEOUT_MS`
+- `TELEGRAM_MAX_CONTEXT_MESSAGES`
+- `TELEGRAM_MAX_RESPONSE_CHARACTERS`
+
+لا تغيّر `ENCRYPTION_KEY` بعد إضافة المزودات؛ تغييره يجعل المفاتيح المخزنة سابقًا غير قابلة لفك التشفير. عند الحاجة إلى تدويره، أعد إدخال مفاتيح المزودات أو نفّذ خطة إعادة تشفير.
+
+## 3. المالك الأول
+
+اضبط مؤقتًا:
+
+```env
+BOOTSTRAP_OWNER_EMAIL=mtzallqmy@gmail.com
+BOOTSTRAP_OWNER_PASSWORD=كلمة-مؤقتة-قوية
+BOOTSTRAP_TOKEN=رمز-عشوائي-طويل-جداً
+```
+
+انشر المشروع، ثم نفّذ طلب `POST /api/setup/bootstrap` مع `X-Bootstrap-Token`. بعد النجاح:
+
+1. احذف `BOOTSTRAP_TOKEN` و`BOOTSTRAP_OWNER_PASSWORD` من Vercel.
+2. أعد النشر.
+3. سجّل الدخول وغيّر كلمة المرور المؤقتة.
+
+لا تضع كلمة مرور المالك داخل Git أو ملفات المشروع.
+
+## 4. تحقق التشغيل
+
+- `GET /api/health` يجب أن يعيد `status: ok`.
+- `GET /api/ready` يجب أن يعيد `status: ready` و`rateLimit: ready`.
+- أنشئ مستخدمًا تجريبيًا من لوحة الإدارة وسجّل الدخول باسم المستخدم.
+- أضف مفتاح مزود تملكه، نفّذ «اختبار واكتشاف»، ثم أرسل رسالة حقيقية.
+- راجع أن رسالة الخطأ المعروضة هي رسالة المزود وتصنيفها، وليست نجاحًا وهميًا.
+- اختبر الجلسة المؤقتة دون Supabase: المفتاح في `sessionStorage` والمحادثات في IndexedDB، ثم استخدم زر المسح وتحقق من اختفاء الاثنين.
+- راجع Network response وVercel logs وتأكد من عدم وجود `apiKey` أو Authorization أو `encrypted_key`.
+- أنشئ Bot من BotFather، اختبر `getMe`، سجّل Webhook، ثم نفّذ فحص Webhook من صفحة التكاملات وتحقق من معلومات البوت الفعلية.
+- ولّد كود الربط، أرسل `/connect CODE` إلى البوت، ثم أرسل رسالة عادية وتحقق من وصول رد النموذج الحقيقي.
+
+## 5. حدود النسخة الحالية
+
+- لا يوجد نظام دفع أو اشتراكات داخلية.
+- GitHub وMCP ووضع الوكيل غير مفعلة. Telegram منفذ فعليًا عبر Webhook، بينما حدّ rate limit الخاص بالـ Webhook والمعالجة يعتمد على limiter PostgreSQL.
+- الاختبارات الآلية لا تتصل بمفاتيح مزودات حقيقية؛ اختبار الاتصال الحقيقي يتم بعد إضافة مفاتيحك من لوحة المزودات.

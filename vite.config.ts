@@ -8,6 +8,10 @@ const __dirname = path.dirname(__filename)
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Support existing Vercel projects that use the framework-neutral
+  // NEXT_PUBLIC_ naming. Only public Supabase URL/key values are exposed;
+  // server-only secrets never match either prefix.
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
   plugins: [react()],
   resolve: {
     alias: {

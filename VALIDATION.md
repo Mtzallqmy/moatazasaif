@@ -9,7 +9,7 @@ npm ci --no-audit --no-fund       PASS
 npm run lint                     PASS
 npm run typecheck                PASS
 npm run typecheck:api            PASS
-npm run test                     PASS — 12 ملفات / 43 اختبارًا
+npm run test                     PASS — 12 ملفات / 45 اختبارًا
 npm run build                    PASS
 ```
 
@@ -54,8 +54,9 @@ npm run build                    PASS
 - Bot Token وProvider API Key لا يظهران في استجابات API، ولا يُسجلان في السجل.
 - الأعمدة المشفرة Server-only، وRLS والمنح تمنع وصول `anon` و`authenticated` المباشر.
 - كل استعلام تكامل يقيّد `user_id` أو `integration_id` بعد التحقق من الملكية.
-- Session rate limit داخل ذاكرة Function ليس موزعًا بين Instances؛ يجب تفعيل Vercel Firewall/WAF،
-  بينما المسارات المحفوظة وTelegram تستخدم limiter ذريًا في PostgreSQL.
+- Session rate limit يستخدم limiter ذريًا موزعًا في PostgreSQL عندما تكون بيئة Supabase
+  مضبوطة في الإنتاج، ولا يُرسل سوى بصمات HMAC. وضع الجلسة بلا Supabase يحتفظ بـ fallback
+  داخل Function، بينما المسارات المحفوظة وTelegram تستخدم PostgreSQL دائمًا.
 
 ## Endpoints النهائية
 

@@ -1,29 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import { Eye, EyeOff, ArrowLeft, Mail } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { toast } from 'sonner'
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordless, setPasswordless] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
-  const { login } = useAuth()
+  const { user, login, requestMagicLink } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as any)?.from?.pathname || '/dashboard'
 
+  useEffect(() => {
+    if (user) navigate(from, { replace: true })
+  }, [from, navigate, user])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!identifier || !password) {
-      toast.error('يرجى إدخال اسم المستخدم أو البريد وكلمة المرور')
+    if (!identifier || (!passwordless && !password)) {
+      toast.error(passwordless ? 'يرجى إدخال البريد الإلكتروني' : 'يرجى إدخال البريد وكلمة المرور')
       return
     }
     
     setIsLoading(true)
-    const success = await login(identifier, password)
+    const success = passwordless ? await requestMagicLink(identifier) : await login(identifier, password)
     setIsLoading(false)
     
     if (success) {
@@ -46,22 +51,22 @@ export default function Login() {
           </div>
 
           <h1 className="text-3xl font-semibold tracking-tight text-center mb-2">مرحباً بعودتك</h1>
-          <p className="text-center text-dark-400 mb-8">سجل الدخول للوصول إلى منصتك</p>
+          <p className="text-center text-dark-400 mb-8">ادخل بالبريد فقط عبر رابط آمن، ثم عيّن كلمة المرور من الإعدادات</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium mb-2 text-dark-300">اسم المستخدم أو البريد الإلكتروني</label>
+              <label className="block text-sm font-medium mb-2 text-dark-300">البريد الإلكتروني</label>
               <input 
-                type="text" 
                 className="input" 
-                placeholder="moataz أو you@example.com" 
+                placeholder="you@example.com" 
+                type="email"
                 value={identifier} 
                 onChange={e => setIdentifier(e.target.value)}
                 required 
               />
             </div>
 
-            <div>
+            {!passwordless && <div>
               <label className="block text-sm font-medium mb-2 text-dark-300">كلمة المرور</label>
               <div className="relative">
                 <input 
@@ -80,16 +85,20 @@ export default function Login() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-            </div>
+            </div>}
 
             <button 
               type="submit" 
               disabled={isLoading}
               className="btn btn-primary w-full py-3.5 text-base mt-2"
             >
-              {isLoading ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
+              {isLoading ? 'جارٍ الإرسال...' : passwordless ? <><Mail size={17} /> إرسال رابط الدخول</> : 'تسجيل الدخول'}
             </button>
           </form>
+
+          <button type="button" className="w-full text-sm text-primary-400 hover:underline mt-5" onClick={() => setPasswordless((value) => !value)}>
+            {passwordless ? 'لدي كلمة مرور وأريد استخدامها' : 'الدخول بدون كلمة مرور عبر البريد'}
+          </button>
 
           <div className="mt-6 text-center text-sm">
             ليس لديك حساب؟{' '}

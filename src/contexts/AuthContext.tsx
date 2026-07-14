@@ -9,6 +9,7 @@ interface AuthContextType {
   user: User | null
   isLoading: boolean
   login: (identifier: string, password: string) => Promise<boolean>
+  requestMagicLink: (email: string) => Promise<boolean>
   register: (name: string, email: string, password: string, username?: string) => Promise<boolean>
   logout: () => Promise<void>
   updateUser: (updates: Partial<User>) => Promise<void>
@@ -77,6 +78,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const requestMagicLink = async (email: string) => {
+    if (!supabase) { toast.error('إعدادات Supabase غير موجودة'); return false }
+    try {
+      const normalizedEmail = email.trim().toLowerCase()
+      if (!normalizedEmail || !normalizedEmail.includes('@')) throw new Error('أدخل بريدًا إلكترونيًا صالحًا')
+      const { error } = await supabase.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: { emailRedirectTo: `${window.location.origin}/login` },
+      })
+      if (error) throw error
+      toast.success('تم إرسال رابط دخول آمن إلى بريدك الإلكتروني')
+      return true
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'تعذر إرسال رابط الدخول')
+      return false
+    }
+  }
+
   const register = async (name: string, email: string, password: string, username?: string) => {
     if (!supabase) { toast.error('إعدادات Supabase غير موجودة'); return false }
     try {
@@ -124,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) { toast.error(error instanceof Error ? error.message : 'تعذر تغيير كلمة المرور'); return false }
   }
 
-  return <AuthContext.Provider value={{ user, isLoading, login, register, logout, updateUser, changePassword, refreshUser }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, isLoading, login, requestMagicLink, register, logout, updateUser, changePassword, refreshUser }}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => {

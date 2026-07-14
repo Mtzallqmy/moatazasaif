@@ -48,8 +48,8 @@
     "ws": "8.21.1"
   },
   "engines": {
-    "node": "20.x",
-    "npm": "10.x"
+    "node": "24.x",
+    "npm": ">=11"
   },
   "packageManager": "npm@10.9.2"
 }

@@ -1,7 +1,7 @@
-import type { VercelRequest, VercelResponse } from '../_lib/vercel'
-import { authenticate, getAdminClient } from '../_lib/supabase'
-import { ApiError, methodNotAllowed, requireString, sendError, setJsonHeaders } from '../_lib/http'
-import { enforceRateLimit } from '../_lib/rate-limit'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel'
+import { authenticate, getAdminClient } from '../../_lib/supabase'
+import { ApiError, methodNotAllowed, requireString, sendError, setJsonHeaders } from '../../_lib/http'
+import { enforceRateLimit } from '../../_lib/rate-limit'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)

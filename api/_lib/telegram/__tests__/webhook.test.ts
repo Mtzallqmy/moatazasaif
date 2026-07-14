@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../service', () => mocks)
 vi.mock('../background', () => ({ scheduleTelegramWork: mocks.scheduleTelegramWork }))
 
-import handler from '../../../integrations/telegram/webhook'
+import handler from '../../../_handlers/telegram/webhook'
 
 function responseMock() {
   const state: any = { headers: {}, statusCode: 200, body: undefined, ended: false }

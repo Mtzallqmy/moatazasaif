@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const subscription = supabase?.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
       if (!session) setUser(null)
-      else if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') void refreshUser()
+      else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') void refreshUser()
     })
     return () => { mounted = false; subscription?.data.subscription.unsubscribe() }
   }, [refreshUser])

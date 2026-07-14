@@ -169,6 +169,12 @@ export function classifyProviderError(error: NormalizedProviderError): Pick<Prov
   const code = (error.code || error.type || '').toLowerCase()
   const message = error.message.toLowerCase()
 
+  if (code === 'cloudflare_challenge') {
+    return { category: 'upstream', code, hint: 'عطّل Browser Challenge لمسارات API لدى المزود أو اطلب منه السماح بطلبات Vercel الخادمية إلى /v1/*.' }
+  }
+  if (code === 'unexpected_html_response') {
+    return { category: 'endpoint', code, hint: 'تحقق أن Base URL يشير إلى API JSON مباشرة وليس إلى صفحة موقع أو صفحة تسجيل دخول.' }
+  }
   if (code.includes('provider_url') || code.includes('private_provider') || code === 'https_required' || code === 'invalid_provider_protocol' || code === 'provider_dns_failed') {
     return { category: 'endpoint', code: error.code || 'invalid_provider_url', hint: 'تحقق من Base URL واستخدم HTTPS عامًا لا يشير إلى localhost أو شبكة داخلية.' }
   }

@@ -87,6 +87,29 @@ export async function readLimitedText(response: Response) {
 
 export async function readProviderJson(response: Response, endpoint: string): Promise<any> {
   const text = await readLimitedText(response)
+  const contentType = response.headers.get('content-type') || ''
+  const looksLikeHtml = /text\/html/i.test(contentType) || /^\s*(?:<!doctype\s+html|<html\b)/i.test(text)
+  if (looksLikeHtml) {
+    const cloudflareChallenge = /cloudflare|just a moment|challenges\.cloudflare\.com|cf-chl-/i.test([
+      response.headers.get('server') || '',
+      response.headers.get('cf-mitigated') || '',
+      text.slice(0, 4_000),
+    ].join(' '))
+    logTechnicalError('[provider-unexpected-html]', new Error(cloudflareChallenge ? 'cloudflare challenge' : 'unexpected html'), {
+      endpoint: sanitizeProviderEndpoint(endpoint),
+      status: response.status,
+      contentType: contentType.slice(0, 100),
+    })
+    throw new ProviderRequestError({
+      message: cloudflareChallenge
+        ? 'بوابة المزود أعادت تحدي Cloudflare بدل استجابة API. يجب السماح بطلبات الخادم لمسارات API.'
+        : 'بوابة المزود أعادت صفحة HTML بدل استجابة JSON الخاصة بالـ API.',
+      code: cloudflareChallenge ? 'cloudflare_challenge' : 'unexpected_html_response',
+      status: response.status,
+      endpoint: sanitizeProviderEndpoint(endpoint),
+      requestId: responseRequestId(response),
+    })
+  }
   let payload: unknown
   try {
     payload = text ? JSON.parse(text) : undefined

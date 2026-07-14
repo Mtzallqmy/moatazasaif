@@ -3,7 +3,7 @@ import { resetEnvCacheForTests } from '../env.js'
 import { parseRequest, providerTestRequestSchema } from '../provider-schemas.js'
 import { loadOwnedProviderCredentials } from '../provider-credentials.js'
 import { assertSafeProviderUrl, classifyProviderError, inferProtocol, isPrivateIpAddress, providerDiagnostic } from '../provider-runtime.js'
-import { parseSseStream } from '../providers/http.js'
+import { parseSseStream, readProviderJson } from '../providers/http.js'
 import { ApiError } from '../http.js'
 import { enforceSessionRateLimit, resetSessionRateLimitsForTests, sessionRateLimitFingerprints } from '../rate-limit.js'
 
@@ -43,6 +43,13 @@ describe('provider classification and protocol detection', () => {
     expect(classifyProviderError({ code: 'timeout', message: 'timed out', protocol: 'gemini' }).category).toBe('timeout')
     expect(classifyProviderError({ status: 408, message: 'request timeout', protocol: 'gemini' }).category).toBe('timeout')
     expect(classifyProviderError({ status: 429, code: 'quota_exceeded', message: 'quota', protocol: 'gemini' }).category).toBe('quota')
+  })
+
+  it('classifies Cloudflare browser challenges as an upstream configuration error', () => {
+    expect(classifyProviderError({ status: 403, code: 'cloudflare_challenge', message: 'challenge', protocol: 'openai-compatible' })).toMatchObject({
+      category: 'upstream',
+      code: 'cloudflare_challenge',
+    })
   })
 
   it('detects all native protocols without routing them through OpenAI', () => {
@@ -112,6 +119,19 @@ describe('SSE parsing and safety', () => {
       { event: 'delta', data: '{"content":"A"}' },
       { event: 'done', data: '{}' },
     ])
+  })
+
+  it('never exposes a Cloudflare HTML challenge as the provider message', async () => {
+    const html = '<!DOCTYPE html><html><head><title>Just a moment...</title></head><body><script src="https://challenges.cloudflare.com/x"></script></body></html>'
+    const response = new Response(html, { status: 403, headers: { 'content-type': 'text/html; charset=UTF-8', server: 'cloudflare' } })
+    try {
+      await readProviderJson(response, 'https://inference.dahl.global/v1/models')
+      throw new Error('expected readProviderJson to reject')
+    } catch (error: any) {
+      expect(error.details.code).toBe('cloudflare_challenge')
+      expect(error.details.message).not.toContain('<html')
+      expect(JSON.stringify(error.details)).not.toContain('challenges.cloudflare.com')
+    }
   })
 
   it('does not expose secrets in a normalized diagnostic', () => {

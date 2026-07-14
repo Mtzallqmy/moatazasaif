@@ -3,7 +3,13 @@ import { extractModelIds, normalizeProviderError, parseSseStream, parseStreamJso
 import { emptyUsage, ProviderRequestError, type ProviderAdapter, type ProviderChatMessage, type ProviderConfig, type ProviderGenerateResult, type ProviderStreamEvent, type ProviderTestResult, usage } from './types.js'
 
 function headers(config: ProviderConfig) {
-  const result: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}`, 'X-Title': 'Moataz AI' }
+  const result: Record<string, string> = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${config.apiKey}`,
+    'User-Agent': 'Moataz-AI/1.0',
+    'X-Title': 'Moataz AI',
+  }
   const appUrl = getProviderRuntimeEnv().APP_URL
   if (appUrl) result['HTTP-Referer'] = appUrl
   return result

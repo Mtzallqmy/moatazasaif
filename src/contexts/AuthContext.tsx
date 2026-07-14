@@ -91,7 +91,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       toast.success('تم إرسال رابط دخول آمن إلى بريدك الإلكتروني')
       return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'تعذر إرسال رابط الدخول')
+      const message = error instanceof Error ? error.message : 'تعذر إرسال رابط الدخول'
+      toast.error(/invalid api key/i.test(message)
+        ? 'مفتاح Supabase العام غير صحيح أو لا يطابق رابط المشروع. راجع VITE_SUPABASE_PUBLISHABLE_KEY أو NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY في Vercel.'
+        : message)
       return false
     }
   }

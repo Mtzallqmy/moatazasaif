@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
-import { ApiError } from '../http'
-import { redactText } from '../redaction'
+import { ApiError } from '../http.js'
+import { redactText } from '../redaction.js'
 
 const BOT_TOKEN_PATTERN = /^\d{5,20}:[A-Za-z0-9_-]{20,256}$/
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'

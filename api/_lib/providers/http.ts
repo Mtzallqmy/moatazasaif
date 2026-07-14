@@ -1,6 +1,6 @@
-import { getProviderRuntimeEnv } from '../env'
-import { logTechnicalError, redactText } from '../redaction'
-import { ProviderRequestError, type NormalizedProviderError, type ProviderProtocol } from './types'
+import { getProviderRuntimeEnv } from '../env.js'
+import { logTechnicalError, redactText } from '../redaction.js'
+import { ProviderRequestError, type NormalizedProviderError, type ProviderProtocol } from './types.js'
 
 export function sanitizeProviderEndpoint(value: string, extraSecrets: string[] = []) {
   try {

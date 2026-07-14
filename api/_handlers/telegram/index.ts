@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from '../../_lib/vercel'
-import { authenticate } from '../../_lib/supabase'
-import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from '../../_lib/http'
-import { enforceRateLimit } from '../../_lib/rate-limit'
-import { parseRequest } from '../../_lib/provider-schemas'
-import { telegramCreateSchema, telegramDeleteSchema, telegramDiagnoseSchema, telegramPatchSchema } from '../../_lib/telegram/schemas'
-import { checkTelegramWebhook, createTelegramIntegration, deleteTelegramIntegration, listOwnedTelegramIntegrations, reregisterTelegramWebhook, sendTelegramTestMessage, updateTelegramChat, updateTelegramIntegration } from '../../_lib/telegram/service'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { authenticate } from '../../_lib/supabase.js'
+import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from '../../_lib/http.js'
+import { enforceRateLimit } from '../../_lib/rate-limit.js'
+import { parseRequest } from '../../_lib/provider-schemas.js'
+import { telegramCreateSchema, telegramDeleteSchema, telegramDiagnoseSchema, telegramPatchSchema } from '../../_lib/telegram/schemas.js'
+import { checkTelegramWebhook, createTelegramIntegration, deleteTelegramIntegration, listOwnedTelegramIntegrations, reregisterTelegramWebhook, sendTelegramTestMessage, updateTelegramChat, updateTelegramIntegration } from '../../_lib/telegram/service.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)

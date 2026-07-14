@@ -1,5 +1,5 @@
-import { getAdminClient } from './supabase'
-import { logTechnicalError, redactUnknown } from './redaction'
+import { getAdminClient } from './supabase.js'
+import { logTechnicalError, redactUnknown } from './redaction.js'
 
 export async function recordAudit(actorId: string | null, targetUserId: string | null, action: string, details: Record<string, unknown> = {}) {
   const { error } = await getAdminClient().from('audit_logs').insert({

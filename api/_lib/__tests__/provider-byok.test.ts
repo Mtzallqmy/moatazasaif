@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resetEnvCacheForTests } from '../env'
-import { parseRequest, providerTestRequestSchema } from '../provider-schemas'
-import { loadOwnedProviderCredentials } from '../provider-credentials'
-import { assertSafeProviderUrl, classifyProviderError, inferProtocol, isPrivateIpAddress, providerDiagnostic } from '../provider-runtime'
-import { parseSseStream } from '../providers/http'
-import { ApiError } from '../http'
-import { enforceSessionRateLimit, resetSessionRateLimitsForTests } from '../rate-limit'
+import { resetEnvCacheForTests } from '../env.js'
+import { parseRequest, providerTestRequestSchema } from '../provider-schemas.js'
+import { loadOwnedProviderCredentials } from '../provider-credentials.js'
+import { assertSafeProviderUrl, classifyProviderError, inferProtocol, isPrivateIpAddress, providerDiagnostic } from '../provider-runtime.js'
+import { parseSseStream } from '../providers/http.js'
+import { ApiError } from '../http.js'
+import { enforceSessionRateLimit, resetSessionRateLimitsForTests } from '../rate-limit.js'
 
 afterEach(() => {
   vi.restoreAllMocks()

@@ -1,6 +1,6 @@
-import { getTelegramRuntimeEnv } from '../env'
-import { redactText } from '../redaction'
-import { TelegramApiError, type TelegramBotUser, type TelegramWebhookInfo } from './types'
+import { getTelegramRuntimeEnv } from '../env.js'
+import { redactText } from '../redaction.js'
+import { TelegramApiError, type TelegramBotUser, type TelegramWebhookInfo } from './types.js'
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot'
 const MAX_TELEGRAM_RESPONSE_BYTES = 1_000_000

@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { resolveProviderBaseUrl, resolveProviderProtocol } from '../../shared/provider-registry'
-import { decryptSecret } from './crypto'
-import { ApiError } from './http'
-import type { EphemeralProviderConfig } from './provider-schemas'
-import type { ProviderRecord } from './provider-runtime'
+import { resolveProviderBaseUrl, resolveProviderProtocol } from '../../shared/provider-registry.js'
+import { decryptSecret } from './crypto.js'
+import { ApiError } from './http.js'
+import type { EphemeralProviderConfig } from './provider-schemas.js'
+import type { ProviderRecord } from './provider-runtime.js'
 
 export function ephemeralProviderRecord(provider: EphemeralProviderConfig): ProviderRecord {
   return {

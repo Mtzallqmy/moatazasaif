@@ -1,5 +1,5 @@
-import type { VercelRequest, VercelResponse } from './_lib/vercel'
-import { methodNotAllowed, setJsonHeaders } from './_lib/http'
+import type { VercelRequest, VercelResponse } from './_lib/vercel.js'
+import { methodNotAllowed, setJsonHeaders } from './_lib/http.js'
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)

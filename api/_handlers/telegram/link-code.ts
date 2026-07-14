@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from '../../_lib/vercel'
-import { authenticate } from '../../_lib/supabase'
-import { methodNotAllowed, sendError, setJsonHeaders } from '../../_lib/http'
-import { enforceRateLimit } from '../../_lib/rate-limit'
-import { parseRequest } from '../../_lib/provider-schemas'
-import { telegramLinkCodeSchema } from '../../_lib/telegram/schemas'
-import { createTelegramLinkCode } from '../../_lib/telegram/service'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { authenticate } from '../../_lib/supabase.js'
+import { methodNotAllowed, sendError, setJsonHeaders } from '../../_lib/http.js'
+import { enforceRateLimit } from '../../_lib/rate-limit.js'
+import { parseRequest } from '../../_lib/provider-schemas.js'
+import { telegramLinkCodeSchema } from '../../_lib/telegram/schemas.js'
+import { createTelegramLinkCode } from '../../_lib/telegram/service.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)

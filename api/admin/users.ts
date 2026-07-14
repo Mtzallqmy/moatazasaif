@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from '../_lib/vercel'
-import { getServerEnv } from '../_lib/env'
-import { ApiError, methodNotAllowed, normalizeEmail, optionalString, requireString, sendError, setJsonHeaders } from '../_lib/http'
-import { getAdminClient, getProfile, requireRoles, type AppRole, type ProfileRow } from '../_lib/supabase'
-import { ALL_ROLES, adminUserView, generateTemporaryPassword, listAllAuthUsers, normalizeUsername, validateUsername } from '../_lib/users'
-import { enforceRateLimit } from '../_lib/rate-limit'
-import { logTechnicalError } from '../_lib/redaction'
+import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
+import { getServerEnv } from '../_lib/env.js'
+import { ApiError, methodNotAllowed, normalizeEmail, optionalString, requireString, sendError, setJsonHeaders } from '../_lib/http.js'
+import { getAdminClient, getProfile, requireRoles, type AppRole, type ProfileRow } from '../_lib/supabase.js'
+import { ALL_ROLES, adminUserView, generateTemporaryPassword, listAllAuthUsers, normalizeUsername, validateUsername } from '../_lib/users.js'
+import { enforceRateLimit } from '../_lib/rate-limit.js'
+import { logTechnicalError } from '../_lib/redaction.js'
 
 async function countActiveOwners() {
   const { count, error } = await getAdminClient()

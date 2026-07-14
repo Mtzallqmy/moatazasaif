@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { generateTemporaryPassword, normalizeUsername, validateUsername } from '../users'
+import { generateTemporaryPassword, normalizeUsername, validateUsername } from '../users.js'
 
 describe('managed users', () => {
   it('generates one-time passwords with requested length', () => {

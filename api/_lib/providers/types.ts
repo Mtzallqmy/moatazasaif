@@ -1,4 +1,4 @@
-import type { ProviderProtocol } from '../../../shared/provider-registry'
+import type { ProviderProtocol } from '../../../shared/provider-registry.js'
 
 export type { ProviderProtocol }
 

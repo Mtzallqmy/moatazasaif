@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type { User as AuthUser } from '@supabase/supabase-js'
-import { ApiError } from './http'
-import { getAdminClient, type AppRole, type ProfileRow } from './supabase'
+import { ApiError } from './http.js'
+import { getAdminClient, type AppRole, type ProfileRow } from './supabase.js'
 
 export const ALL_ROLES: AppRole[] = ['owner', 'admin', 'supervisor', 'user']
 

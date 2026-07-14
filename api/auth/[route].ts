@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from '../_lib/vercel'
-import { methodNotAllowed } from '../_lib/http'
-import login from '../_handlers/auth/login'
-import me from '../_handlers/auth/me'
-import password from '../_handlers/auth/password'
-import profile from '../_handlers/auth/profile'
-import register from '../_handlers/auth/register'
+import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
+import { methodNotAllowed } from '../_lib/http.js'
+import login from '../_handlers/auth/login.js'
+import me from '../_handlers/auth/me.js'
+import password from '../_handlers/auth/password.js'
+import profile from '../_handlers/auth/profile.js'
+import register from '../_handlers/auth/register.js'
 
 const handlers: Record<string, (req: VercelRequest, res: VercelResponse) => unknown> = { login, me, password, profile, register }
 

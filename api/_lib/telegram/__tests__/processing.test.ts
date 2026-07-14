@@ -37,7 +37,7 @@ vi.mock('../../audit', () => ({ recordAudit: mocks.recordAudit }))
 vi.mock('../../crypto', () => ({ decryptSecret: mocks.decryptSecret }))
 vi.mock('../../env', () => ({ getTelegramRuntimeEnv: () => ({ TELEGRAM_MAX_CONTEXT_MESSAGES: 20, TELEGRAM_MAX_RESPONSE_CHARACTERS: 16_000, TELEGRAM_WEBHOOK_PROCESSING_TIMEOUT_MS: 45_000 }) }))
 
-import { processTelegramUpdate } from '../service'
+import { processTelegramUpdate } from '../service.js'
 
 afterEach(() => vi.clearAllMocks())
 

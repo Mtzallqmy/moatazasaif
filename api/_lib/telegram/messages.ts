@@ -1,5 +1,5 @@
-import type { ProviderChatMessage } from '../providers/types'
-import type { TelegramMessage, TelegramUpdate } from './types'
+import type { ProviderChatMessage } from '../providers/types.js'
+import type { TelegramMessage, TelegramUpdate } from './types.js'
 
 export const TELEGRAM_MAX_MESSAGE_LENGTH = 4_096
 

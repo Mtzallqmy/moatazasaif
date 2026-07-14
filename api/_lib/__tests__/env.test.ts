@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getServerEnv, resetEnvCacheForTests } from '../env'
+import { getServerEnv, resetEnvCacheForTests } from '../env.js'
 
 const snapshot = { ...process.env }
 

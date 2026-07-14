@@ -1,12 +1,12 @@
-import type { VercelRequest, VercelResponse } from '../_lib/vercel'
-import { authenticate, getAdminClient } from '../_lib/supabase'
-import { encryptSecret } from '../_lib/crypto'
-import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from '../_lib/http'
-import { assertSafeProviderUrl } from '../_lib/provider-runtime'
-import { enforceRateLimit } from '../_lib/rate-limit'
-import { parseRequest, providerCreateSchema, providerDeleteSchema, providerPatchSchema } from '../_lib/provider-schemas'
-import { getProviderDefinition, resolveProviderBaseUrl, resolveProviderProtocol } from '../../shared/provider-registry'
-import { logTechnicalError, redactText, redactUnknown } from '../_lib/redaction'
+import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
+import { authenticate, getAdminClient } from '../_lib/supabase.js'
+import { encryptSecret } from '../_lib/crypto.js'
+import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from '../_lib/http.js'
+import { assertSafeProviderUrl } from '../_lib/provider-runtime.js'
+import { enforceRateLimit } from '../_lib/rate-limit.js'
+import { parseRequest, providerCreateSchema, providerDeleteSchema, providerPatchSchema } from '../_lib/provider-schemas.js'
+import { getProviderDefinition, resolveProviderBaseUrl, resolveProviderProtocol } from '../../shared/provider-registry.js'
+import { logTechnicalError, redactText, redactUnknown } from '../_lib/redaction.js'
 
 export function publicProvider(provider: any) {
   return {

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resetEnvCacheForTests } from '../env'
-import { anthropicAdapter } from '../providers/anthropic'
-import { geminiAdapter } from '../providers/gemini'
-import { openAiCompatibleAdapter } from '../providers/openai-compatible'
-import type { ProviderConfig } from '../providers/types'
+import { resetEnvCacheForTests } from '../env.js'
+import { anthropicAdapter } from '../providers/anthropic.js'
+import { geminiAdapter } from '../providers/gemini.js'
+import { openAiCompatibleAdapter } from '../providers/openai-compatible.js'
+import type { ProviderConfig } from '../providers/types.js'
 
 const base = { type: 'custom', baseUrl: 'http://localhost/v1', apiKey: 'temporary-secret-key', protocol: 'openai-compatible' as const }
 

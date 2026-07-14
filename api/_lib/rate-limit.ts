@@ -1,8 +1,8 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto'
-import type { VercelRequest } from './vercel'
-import { ApiError } from './http'
-import { getAdminClient } from './supabase'
-import { logTechnicalError } from './redaction'
+import type { VercelRequest } from './vercel.js'
+import { ApiError } from './http.js'
+import { getAdminClient } from './supabase.js'
+import { logTechnicalError } from './redaction.js'
 
 function clientIp(req: VercelRequest) {
   const forwarded = req.headers['x-forwarded-for']

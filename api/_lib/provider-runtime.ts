@@ -1,14 +1,14 @@
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
-import { getProviderDefinition, resolveProviderBaseUrl, resolveProviderProtocol, type ProviderProtocol } from '../../shared/provider-registry'
-import { getProviderRuntimeEnv } from './env'
-import { ApiError } from './http'
-import { redactText } from './redaction'
-import { anthropicAdapter } from './providers/anthropic'
-import { geminiAdapter } from './providers/gemini'
-import { normalizeProviderError, sanitizeProviderEndpoint } from './providers/http'
-import { openAiCompatibleAdapter } from './providers/openai-compatible'
-import type { NormalizedProviderError, ProviderAdapter, ProviderChatMessage, ProviderConfig, ProviderStreamEvent } from './providers/types'
+import { getProviderDefinition, resolveProviderBaseUrl, resolveProviderProtocol, type ProviderProtocol } from '../../shared/provider-registry.js'
+import { getProviderRuntimeEnv } from './env.js'
+import { ApiError } from './http.js'
+import { redactText } from './redaction.js'
+import { anthropicAdapter } from './providers/anthropic.js'
+import { geminiAdapter } from './providers/gemini.js'
+import { normalizeProviderError, sanitizeProviderEndpoint } from './providers/http.js'
+import { openAiCompatibleAdapter } from './providers/openai-compatible.js'
+import type { NormalizedProviderError, ProviderAdapter, ProviderChatMessage, ProviderConfig, ProviderStreamEvent } from './providers/types.js'
 
 export type { ProviderProtocol, ProviderStreamEvent }
 export type ChatMessage = ProviderChatMessage

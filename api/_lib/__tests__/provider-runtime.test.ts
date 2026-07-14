@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inferProtocol, isPrivateIpAddress, providerBaseUrl, sanitizeProviderEndpoint } from '../provider-runtime'
+import { inferProtocol, isPrivateIpAddress, providerBaseUrl, sanitizeProviderEndpoint } from '../provider-runtime.js'
 
 describe('provider runtime', () => {
   it('detects native protocols', () => {

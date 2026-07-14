@@ -1,11 +1,11 @@
-import type { VercelRequest, VercelResponse } from './_lib/vercel'
-import { authenticate, getAdminClient } from './_lib/supabase'
-import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from './_lib/http'
-import { assertSafeProviderUrl, generateProviderText, inferProtocol, providerBaseUrl, providerDiagnostic, sanitizeProviderEndpoint, streamProviderText, type ProviderRecord, type ProviderStreamEvent } from './_lib/provider-runtime'
-import { enforceRateLimit, enforceSessionRateLimit } from './_lib/rate-limit'
-import { chatRequestSchema, parseRequest } from './_lib/provider-schemas'
-import { ephemeralProviderRecord, ephemeralRateLimitParts, loadOwnedProviderCredentials } from './_lib/provider-credentials'
-import { logTechnicalError, redactText, redactUnknown } from './_lib/redaction'
+import type { VercelRequest, VercelResponse } from './_lib/vercel.js'
+import { authenticate, getAdminClient } from './_lib/supabase.js'
+import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from './_lib/http.js'
+import { assertSafeProviderUrl, generateProviderText, inferProtocol, providerBaseUrl, providerDiagnostic, sanitizeProviderEndpoint, streamProviderText, type ProviderRecord, type ProviderStreamEvent } from './_lib/provider-runtime.js'
+import { enforceRateLimit, enforceSessionRateLimit } from './_lib/rate-limit.js'
+import { chatRequestSchema, parseRequest } from './_lib/provider-schemas.js'
+import { ephemeralProviderRecord, ephemeralRateLimitParts, loadOwnedProviderCredentials } from './_lib/provider-credentials.js'
+import { logTechnicalError, redactText, redactUnknown } from './_lib/redaction.js'
 
 function writeSse(res: VercelResponse, event: ProviderStreamEvent['event'], data: unknown, extraSecrets: string[] = []) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(redactUnknown(data, extraSecrets, 0, Number.MAX_SAFE_INTEGER))}\n\n`)

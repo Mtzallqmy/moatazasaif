@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import handler from '../../providers/test'
-import type { VercelRequest, VercelResponse } from '../vercel'
-import { resetEnvCacheForTests } from '../env'
+import handler from '../../providers/test.js'
+import type { VercelRequest, VercelResponse } from '../vercel.js'
+import { resetEnvCacheForTests } from '../env.js'
 
 function responseMock() {
   const state: any = { headers: {}, statusCode: 200, body: undefined, ended: false }

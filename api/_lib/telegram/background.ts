@@ -1,5 +1,5 @@
 import { waitUntil as vercelWaitUntil } from '@vercel/functions'
-import { logTechnicalError } from '../redaction'
+import { logTechnicalError } from '../redaction.js'
 
 export function scheduleTelegramWork(task: Promise<void>) {
   const guarded = task.catch((error) => {

@@ -1,6 +1,6 @@
-import type { VercelRequest, VercelResponse } from '../../_lib/vercel'
-import { authenticate, publicUser } from '../../_lib/supabase'
-import { methodNotAllowed, sendError, setJsonHeaders } from '../../_lib/http'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { authenticate, publicUser } from '../../_lib/supabase.js'
+import { methodNotAllowed, sendError, setJsonHeaders } from '../../_lib/http.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)

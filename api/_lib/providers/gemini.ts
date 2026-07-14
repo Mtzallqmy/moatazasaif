@@ -1,6 +1,6 @@
-import { getProviderRuntimeEnv } from '../env'
-import { extractModelIds, normalizeProviderError, parseSseStream, parseStreamJson, providerFetch, readProviderJson } from './http'
-import { emptyUsage, ProviderRequestError, type ProviderAdapter, type ProviderChatMessage, type ProviderConfig, type ProviderGenerateResult, type ProviderStreamEvent, type ProviderTestResult, usage } from './types'
+import { getProviderRuntimeEnv } from '../env.js'
+import { extractModelIds, normalizeProviderError, parseSseStream, parseStreamJson, providerFetch, readProviderJson } from './http.js'
+import { emptyUsage, ProviderRequestError, type ProviderAdapter, type ProviderChatMessage, type ProviderConfig, type ProviderGenerateResult, type ProviderStreamEvent, type ProviderTestResult, usage } from './types.js'
 
 function headers(config: ProviderConfig) {
   return { 'Content-Type': 'application/json', 'x-goog-api-key': config.apiKey }

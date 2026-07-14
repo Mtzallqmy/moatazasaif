@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { VercelRequest, VercelResponse } from '../../vercel'
+import type { VercelRequest, VercelResponse } from '../../vercel.js'
 
 const mocks = vi.hoisted(() => ({
   findIntegrationByWebhookSecret: vi.fn(),
@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../service', () => mocks)
 vi.mock('../background', () => ({ scheduleTelegramWork: mocks.scheduleTelegramWork }))
 
-import handler from '../../../_handlers/telegram/webhook'
+import handler from '../../../_handlers/telegram/webhook.js'
 
 function responseMock() {
   const state: any = { headers: {}, statusCode: 200, body: undefined, ended: false }

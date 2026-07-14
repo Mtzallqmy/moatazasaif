@@ -1,7 +1,7 @@
-import type { VercelRequest, VercelResponse } from '../../_lib/vercel'
-import { ApiError, methodNotAllowed, normalizeEmail, requireString, sendError, setJsonHeaders } from '../../_lib/http'
-import { getAdminClient, getProfile, getPublicAuthClient, publicUser } from '../../_lib/supabase'
-import { enforceRateLimit } from '../../_lib/rate-limit'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { ApiError, methodNotAllowed, normalizeEmail, requireString, sendError, setJsonHeaders } from '../../_lib/http.js'
+import { getAdminClient, getProfile, getPublicAuthClient, publicUser } from '../../_lib/supabase.js'
+import { enforceRateLimit } from '../../_lib/rate-limit.js'
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 

@@ -1,8 +1,8 @@
-import type { VercelRequest, VercelResponse } from './_lib/vercel'
-import { getServerEnv } from './_lib/env'
-import { getAdminClient } from './_lib/supabase'
-import { methodNotAllowed, setJsonHeaders } from './_lib/http'
-import { logTechnicalError } from './_lib/redaction'
+import type { VercelRequest, VercelResponse } from './_lib/vercel.js'
+import { getServerEnv } from './_lib/env.js'
+import { getAdminClient } from './_lib/supabase.js'
+import { methodNotAllowed, setJsonHeaders } from './_lib/http.js'
+import { logTechnicalError } from './_lib/redaction.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)

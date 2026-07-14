@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { getProviderDefinition, isProviderType, PROVIDER_PROTOCOLS } from '../../shared/provider-registry'
-import type { CredentialMode as SharedCredentialMode } from '../../shared/credential-mode'
-import { ApiError } from './http'
+import { getProviderDefinition, isProviderType, PROVIDER_PROTOCOLS } from '../../shared/provider-registry.js'
+import type { CredentialMode as SharedCredentialMode } from '../../shared/credential-mode.js'
+import { ApiError } from './http.js'
 
 const emptyToUndefined = (value: unknown) => typeof value === 'string' && value.trim() === '' ? undefined : value
 const trimmed = (max: number) => z.string().trim().min(1).max(max)

@@ -1,9 +1,9 @@
-import type { VercelRequest, VercelResponse } from '../../_lib/vercel'
-import { methodNotAllowed } from '../../_lib/http'
-import diagnose from '../../_handlers/telegram/diagnose'
-import linkCode from '../../_handlers/telegram/link-code'
-import test from '../../_handlers/telegram/test'
-import webhook from '../../_handlers/telegram/webhook'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { methodNotAllowed } from '../../_lib/http.js'
+import diagnose from '../../_handlers/telegram/diagnose.js'
+import linkCode from '../../_handlers/telegram/link-code.js'
+import test from '../../_handlers/telegram/test.js'
+import webhook from '../../_handlers/telegram/webhook.js'
 
 const handlers: Record<string, (req: VercelRequest, res: VercelResponse) => unknown> = {
   diagnose,

@@ -1,11 +1,11 @@
-import type { VercelRequest, VercelResponse } from '../_lib/vercel'
-import { authenticate, getAdminClient } from '../_lib/supabase'
-import { methodNotAllowed, sendError, setJsonHeaders } from '../_lib/http'
-import { testProviderConnection } from '../_lib/provider-runtime'
-import { enforceRateLimit, enforceSessionRateLimit } from '../_lib/rate-limit'
-import { parseRequest, providerTestRequestSchema } from '../_lib/provider-schemas'
-import { ephemeralProviderRecord, ephemeralRateLimitParts, loadOwnedProviderCredentials } from '../_lib/provider-credentials'
-import { logTechnicalError } from '../_lib/redaction'
+import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
+import { authenticate, getAdminClient } from '../_lib/supabase.js'
+import { methodNotAllowed, sendError, setJsonHeaders } from '../_lib/http.js'
+import { testProviderConnection } from '../_lib/provider-runtime.js'
+import { enforceRateLimit, enforceSessionRateLimit } from '../_lib/rate-limit.js'
+import { parseRequest, providerTestRequestSchema } from '../_lib/provider-schemas.js'
+import { ephemeralProviderRecord, ephemeralRateLimitParts, loadOwnedProviderCredentials } from '../_lib/provider-credentials.js'
+import { logTechnicalError } from '../_lib/redaction.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)

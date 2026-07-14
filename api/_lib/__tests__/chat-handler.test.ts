@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import handler from '../../chat'
-import type { VercelRequest, VercelResponse } from '../vercel'
-import { resetEnvCacheForTests } from '../env'
+import handler from '../../chat.js'
+import type { VercelRequest, VercelResponse } from '../vercel.js'
+import { resetEnvCacheForTests } from '../env.js'
 
 function responseMock() {
   const state: any = { headers: {}, statusCode: 200, chunks: [] as string[], ended: false }

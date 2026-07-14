@@ -1,8 +1,8 @@
-import type { VercelRequest, VercelResponse } from '../../_lib/vercel'
-import { getServerEnv } from '../../_lib/env'
-import { ApiError, methodNotAllowed, normalizeEmail, optionalString, requireString, sendError, setJsonHeaders } from '../../_lib/http'
-import { getAdminClient, getPublicAuthClient, publicUser } from '../../_lib/supabase'
-import { enforceRateLimit } from '../../_lib/rate-limit'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { getServerEnv } from '../../_lib/env.js'
+import { ApiError, methodNotAllowed, normalizeEmail, optionalString, requireString, sendError, setJsonHeaders } from '../../_lib/http.js'
+import { getAdminClient, getPublicAuthClient, publicUser } from '../../_lib/supabase.js'
+import { enforceRateLimit } from '../../_lib/rate-limit.js'
 
 const usernamePattern = /^[a-z0-9][a-z0-9._-]{2,31}$/i
 

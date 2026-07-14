@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { VercelRequest, VercelResponse } from './vercel'
-import { logTechnicalError, redactText, redactUnknown } from './redaction'
+import type { VercelRequest, VercelResponse } from './vercel.js'
+import { logTechnicalError, redactText, redactUnknown } from './redaction.js'
 
 export class ApiError extends Error {
   constructor(

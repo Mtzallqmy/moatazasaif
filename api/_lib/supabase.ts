@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient, type User as AuthUser } from '@supabase/supabase-js'
-import type { VercelRequest } from './vercel'
-import { ApiError, getBearerToken } from './http'
-import { getServerEnv } from './env'
+import type { VercelRequest } from './vercel.js'
+import { ApiError, getBearerToken } from './http.js'
+import { getServerEnv } from './env.js'
 
 export type AppRole = 'owner' | 'admin' | 'supervisor' | 'user'
 

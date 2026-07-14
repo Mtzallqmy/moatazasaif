@@ -1,10 +1,10 @@
 import { timingSafeEqual } from 'node:crypto'
-import type { VercelRequest, VercelResponse } from '../_lib/vercel'
-import { getServerEnv } from '../_lib/env'
-import { ApiError, methodNotAllowed, normalizeEmail, optionalString, sendError, setJsonHeaders } from '../_lib/http'
-import { getAdminClient } from '../_lib/supabase'
-import { findAuthUserByEmail } from '../_lib/users'
-import { enforceRateLimit } from '../_lib/rate-limit'
+import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
+import { getServerEnv } from '../_lib/env.js'
+import { ApiError, methodNotAllowed, normalizeEmail, optionalString, sendError, setJsonHeaders } from '../_lib/http.js'
+import { getAdminClient } from '../_lib/supabase.js'
+import { findAuthUserByEmail } from '../_lib/users.js'
+import { enforceRateLimit } from '../_lib/rate-limit.js'
 
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left)

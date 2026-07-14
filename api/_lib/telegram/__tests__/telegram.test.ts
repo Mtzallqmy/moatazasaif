@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resetEnvCacheForTests } from '../../env'
-import { callTelegram, deleteWebhook, getMe, getWebhookInfo, sendChatAction, sendMessage, setMyCommands, setWebhook } from '../client'
-import { generateLinkCode, normalizeBotToken, sha256Hex } from '../security'
-import { splitTelegramMessage } from '../messages'
-import { telegramUpdateSchema } from '../types'
+import { resetEnvCacheForTests } from '../../env.js'
+import { callTelegram, deleteWebhook, getMe, getWebhookInfo, sendChatAction, sendMessage, setMyCommands, setWebhook } from '../client.js'
+import { generateLinkCode, normalizeBotToken, sha256Hex } from '../security.js'
+import { splitTelegramMessage } from '../messages.js'
+import { telegramUpdateSchema } from '../types.js'
 
 afterEach(() => {
   vi.unstubAllGlobals()

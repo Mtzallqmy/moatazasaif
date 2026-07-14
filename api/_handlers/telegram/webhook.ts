@@ -1,8 +1,8 @@
-import type { VercelRequest, VercelResponse } from '../../_lib/vercel'
-import { ApiError, sendError, setJsonHeaders } from '../../_lib/http'
-import { scheduleTelegramWork } from '../../_lib/telegram/background'
-import { findIntegrationByWebhookSecret, processTelegramUpdate, saveReceivedTelegramUpdate } from '../../_lib/telegram/service'
-import { telegramUpdateSchema } from '../../_lib/telegram/types'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { ApiError, sendError, setJsonHeaders } from '../../_lib/http.js'
+import { scheduleTelegramWork } from '../../_lib/telegram/background.js'
+import { findIntegrationByWebhookSecret, processTelegramUpdate, saveReceivedTelegramUpdate } from '../../_lib/telegram/service.js'
+import { telegramUpdateSchema } from '../../_lib/telegram/types.js'
 
 function headerValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value

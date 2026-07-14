@@ -1,1 +1,1 @@
-export { default } from '../_handlers/telegram/index'
+export { default } from '../_handlers/telegram/index.js'

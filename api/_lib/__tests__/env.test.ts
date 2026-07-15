@@ -41,4 +41,13 @@ describe('server environment', () => {
     resetEnvCacheForTests()
     expect(getTelegramWebhookUrl()).toBe('https://moatazasaif.vercel.app/api/integrations/telegram/webhook')
   })
+
+  it('ignores a stale localhost APP_URL in production', () => {
+    Object.assign(process.env, {
+      NODE_ENV: 'production',
+      APP_URL: 'http://localhost:3000',
+    })
+    resetEnvCacheForTests()
+    expect(getTelegramWebhookUrl()).toBe('https://moatazasaif.vercel.app/api/integrations/telegram/webhook')
+  })
 })

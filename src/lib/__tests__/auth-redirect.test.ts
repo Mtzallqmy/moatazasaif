@@ -9,6 +9,7 @@ describe('Supabase magic-link redirect', () => {
 
   it('uses an explicit HTTPS origin and strips paths', () => {
     expect(resolveAuthRedirectUrl('https://moatazasaif.vercel.app/', 'https://preview.example.com')).toBe('https://moatazasaif.vercel.app/login')
-    expect(resolveAuthRedirectUrl(undefined, 'https://custom.example.com/dashboard')).toBe('https://custom.example.com/login')
+    expect(resolveAuthRedirectUrl(undefined, 'https://custom.example.com/dashboard')).toBe('https://moatazasaif.vercel.app/login')
+    expect(resolveAuthRedirectUrl('https://custom.example.com/dashboard', 'https://moatazasaif.vercel.app')).toBe('https://custom.example.com/login')
   })
 })

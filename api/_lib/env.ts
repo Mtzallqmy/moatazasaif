@@ -114,9 +114,18 @@ export function getTelegramWebhookUrl() {
   // alias is a safe fallback so a newly connected bot cannot silently fail
   // just because a Vercel environment variable was omitted. Preview/custom
   // domains should still set APP_URL explicitly.
-  const appUrl = getTelegramRuntimeEnv().APP_URL
-    || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined)
-    || 'https://moatazasaif.vercel.app'
+  const configured = getTelegramRuntimeEnv().APP_URL
+  const vercelProduction = process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined
+  const isSafePublicHttps = (value: string | undefined) => {
+    if (!value) return false
+    try {
+      const url = new URL(value)
+      return url.protocol === 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+    } catch {
+      return false
+    }
+  }
+  const appUrl = [configured, vercelProduction, 'https://moatazasaif.vercel.app'].find(isSafePublicHttps) || 'https://moatazasaif.vercel.app'
   const url = new URL('/api/integrations/telegram/webhook', appUrl)
   if (url.protocol !== 'https:') throw new Error('APP_URL يجب أن يستخدم HTTPS لتسجيل Telegram Webhook')
   return url.toString()

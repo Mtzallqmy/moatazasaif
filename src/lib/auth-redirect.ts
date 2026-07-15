@@ -15,7 +15,10 @@ function isLocalOrigin(value: string) {
  * HTTPS browser origin is used and localhost falls back to production.
  */
 export function resolveAuthRedirectUrl(configured: string | undefined, currentOrigin: string, productionUrl = PRODUCTION_APP_URL) {
-  const candidate = configured?.trim() || (!isLocalOrigin(currentOrigin) ? currentOrigin : productionUrl)
+  // Only an explicitly configured origin may override production. This keeps
+  // preview copies and arbitrary HTTPS hosts from becoming magic-link
+  // destinations when the public env variable is missing.
+  const candidate = configured?.trim() || productionUrl
   try {
     const url = new URL(candidate)
     if (url.protocol !== 'https:' || isLocalOrigin(url.origin)) return `${productionUrl}/login`

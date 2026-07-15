@@ -129,8 +129,21 @@ npm run check
 - استخدم HTTPS لمزودات API في الإنتاج.
 - فعّل Email Auth في Supabase واضبط Site URL وRedirect URLs على نطاق Vercel. يجب أن يكون Site URL هو `https://moatazasaif.vercel.app` وأن تتضمن Redirect URLs العنوان `https://moatazasaif.vercel.app/login`.
 - اضبط `VITE_APP_URL=https://moatazasaif.vercel.app` كمتغير عام للواجهة. يوجد fallback إنتاجي داخل الكود، لكن ضبطه صراحةً يمنع اختلاف الروابط عند استخدام نطاق مخصص.
+- لا تخلط مشاريع Supabase في متغيرات الواجهة: في Production اترك `VITE_SUPABASE_URL` و`VITE_SUPABASE_PUBLISHABLE_KEY` فقط، واحذف القيم القديمة المتعارضة من `NEXT_PUBLIC_*` و`*_ANON_KEY`. اترك `SUPABASE_SERVICE_ROLE_KEY` و`ENCRYPTION_KEY` خادميين فقط.
 - أضف متغيرات `PROVIDER_MAX_RESPONSE_BYTES` و`PROVIDER_MAX_OUTPUT_TOKENS` عند الحاجة ضمن حدود `.env.example`.
 - لا تضع مفاتيح المزودات أو `SUPABASE_SERVICE_ROLE_KEY` أو `ENCRYPTION_KEY` في أي متغير يبدأ بـ `VITE_`.
+
+### الدخول عبر Google وGitHub
+
+تظهر أزرار Google وGitHub في صفحتي الدخول والتسجيل، وتستخدمان نفس عنوان الإنتاج `https://moatazasaif.vercel.app/login`. تفعيلهما يحتاج إعدادًا واحدًا في Supabase Dashboard، ولا يحتاج أي سر جديد في Vercel:
+
+1. من **Authentication → Providers** فعّل Google و/أو GitHub وأدخل Client ID وClient Secret.
+2. في Google Cloud Console وGitHub OAuth App استخدم عنوان callback الخاص بمشروع Supabase:
+   `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
+3. من **Authentication → URL Configuration** اضبط Site URL على `https://moatazasaif.vercel.app` وأضف Redirect URL نفسه مع `/login`.
+4. اطلب تسجيلًا جديدًا بعد التغيير؛ الروابط القديمة التي تحتوي `localhost` لا تتغير بأثر رجعي.
+
+إذا ظهر خطأ `provider is not enabled` فالمشكلة إعداد OAuth في Supabase، وليست في واجهة الموقع.
 
 ### نشر Vercel
 

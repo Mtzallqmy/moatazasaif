@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { toast } from 'sonner'
+import OAuthButtons from '../components/OAuthButtons'
 
 export default function Register() {
   const [name, setName] = useState('')
@@ -33,7 +34,9 @@ export default function Register() {
         <div className="card p-8 border-dark-700">
           <div className="flex justify-center mb-6"><div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-600 to-accent-600 flex items-center justify-center"><span className="text-white text-3xl font-bold">م</span></div></div>
           <h1 className="text-3xl font-semibold tracking-tight text-center mb-2">أنشئ حسابك</h1>
-          <p className="text-center text-dark-400 mb-8">قد يكون التسجيل العام متوقفًا ويُدار من لوحة المدير</p>
+          <p className="text-center text-dark-400 mb-8">أنشئ حسابًا مباشرة عبر Google أو GitHub، أو استخدم البريد الإلكتروني</p>
+          <OAuthButtons />
+          <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-dark-700" /></div><div className="relative flex justify-center"><span className="bg-dark-950 px-3 text-xs text-dark-500">أو التسجيل بالبريد الإلكتروني</span></div></div>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div><label className="block text-sm font-medium mb-2 text-dark-300">الاسم الكامل</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} required /></div>
             <div><label className="block text-sm font-medium mb-2 text-dark-300">اسم المستخدم (اختياري)</label><input className="input" dir="ltr" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="moataz" /></div>

@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, ArrowLeft, Mail } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { toast } from 'sonner'
+import OAuthButtons from '../components/OAuthButtons'
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('')
@@ -51,7 +52,11 @@ export default function Login() {
           </div>
 
           <h1 className="text-3xl font-semibold tracking-tight text-center mb-2">مرحباً بعودتك</h1>
-          <p className="text-center text-dark-400 mb-8">ادخل بالبريد فقط عبر رابط آمن، ثم عيّن كلمة المرور من الإعدادات</p>
+          <p className="text-center text-dark-400 mb-8">ادخل مباشرة بحساب Google أو GitHub، أو استخدم رابطًا آمنًا عبر البريد</p>
+
+          <OAuthButtons />
+
+          <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-dark-700" /></div><div className="relative flex justify-center"><span className="bg-dark-950 px-3 text-xs text-dark-500">أو الدخول بالبريد الإلكتروني</span></div></div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>

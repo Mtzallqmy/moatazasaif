@@ -11,12 +11,15 @@ interface AuthContextType {
   isLoading: boolean
   login: (identifier: string, password: string) => Promise<boolean>
   requestMagicLink: (email: string) => Promise<boolean>
+  signInWithOAuth: (provider: OAuthProvider) => Promise<boolean>
   register: (name: string, email: string, password: string, username?: string) => Promise<boolean>
   logout: () => Promise<void>
   updateUser: (updates: Partial<User>) => Promise<void>
   changePassword: (password: string) => Promise<boolean>
   refreshUser: () => Promise<void>
 }
+
+export type OAuthProvider = 'google' | 'github'
 
 interface ApiSession {
   access_token: string
@@ -100,6 +103,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const signInWithOAuth = async (provider: OAuthProvider) => {
+    if (!supabase) {
+      toast.error('إعدادات Supabase العامة غير صالحة أو لا تطابق المشروع. راجع متغيرات VITE_SUPABASE في Vercel.')
+      return false
+    }
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: getAuthRedirectUrl(),
+          ...(provider === 'google' ? { queryParams: { prompt: 'select_account' } } : {}),
+        },
+      })
+      if (error) throw error
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر بدء تسجيل الدخول عبر المزود'
+      if (/provider.*(not enabled|disabled|unsupported)/i.test(message)) {
+        toast.error(`فعّل تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} من Supabase ثم أعد المحاولة`)
+      } else if (/redirect|url.*not allowed/i.test(message)) {
+        toast.error('عنوان إعادة التوجيه غير مسموح. أضف https://moatazasaif.vercel.app/login إلى Redirect URLs في Supabase.')
+      } else {
+        toast.error(message)
+      }
+      return false
+    }
+  }
+
   const register = async (name: string, email: string, password: string, username?: string) => {
     if (!supabase) { toast.error('إعدادات Supabase غير موجودة'); return false }
     try {
@@ -147,7 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) { toast.error(error instanceof Error ? error.message : 'تعذر تغيير كلمة المرور'); return false }
   }
 
-  return <AuthContext.Provider value={{ user, isLoading, login, requestMagicLink, register, logout, updateUser, changePassword, refreshUser }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, isLoading, login, requestMagicLink, signInWithOAuth, register, logout, updateUser, changePassword, refreshUser }}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => {

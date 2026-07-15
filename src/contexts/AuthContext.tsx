@@ -26,6 +26,31 @@ interface ApiSession {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+const PRODUCTION_APP_URL = 'https://moatazasaif.vercel.app'
+
+function isLocalOrigin(value: string) {
+  try {
+    const url = new URL(value)
+    return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
+  } catch {
+    return true
+  }
+}
+
+function getAuthRedirectUrl() {
+  const configured = import.meta.env.VITE_APP_URL || import.meta.env.NEXT_PUBLIC_APP_URL
+  const current = typeof window !== 'undefined' ? window.location.origin : ''
+  const candidate = configured?.trim() || (!isLocalOrigin(current) ? current : PRODUCTION_APP_URL)
+
+  try {
+    const url = new URL(candidate)
+    if (url.protocol !== 'https:' || isLocalOrigin(url.origin)) return `${PRODUCTION_APP_URL}/login`
+    return `${url.origin}/login`
+  } catch {
+    return `${PRODUCTION_APP_URL}/login`
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -85,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!normalizedEmail || !normalizedEmail.includes('@')) throw new Error('أدخل بريدًا إلكترونيًا صالحًا')
       const { error } = await supabase.auth.signInWithOtp({
         email: normalizedEmail,
-        options: { emailRedirectTo: `${window.location.origin}/login` },
+        options: { emailRedirectTo: getAuthRedirectUrl() },
       })
       if (error) throw error
       toast.success('تم إرسال رابط دخول آمن إلى بريدك الإلكتروني')

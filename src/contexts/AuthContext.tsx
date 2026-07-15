@@ -118,6 +118,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         toast.error(`تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} غير مفعّل حاليًا. أكمِل إعداد المزوّد في Supabase ثم أعد المحاولة.`)
         return false
       }
+      if (availability === 'unreachable') {
+        toast.error('تعذر وصول جهازك إلى نطاق Supabase. إذا ظهر DNS_PROBE_FINISHED_NXDOMAIN فعّل DNS الخاص dns.google في إعدادات الشبكة، ثم أعد فتح صفحة الدخول.')
+        return false
+      }
       if (availability === 'unknown') {
         toast.error('تعذر التحقق من إعدادات تسجيل الدخول الآن. تحقق من اتصال Supabase ثم أعد المحاولة.')
         return false

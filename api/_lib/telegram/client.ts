@@ -1,6 +1,6 @@
 import { getTelegramRuntimeEnv } from '../env.js'
 import { redactText } from '../redaction.js'
-import { TelegramApiError, type TelegramBotUser, type TelegramWebhookInfo } from './types.js'
+import { TelegramApiError, type TelegramBotUser, type TelegramChat, type TelegramWebhookInfo } from './types.js'
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot'
 const MAX_TELEGRAM_RESPONSE_BYTES = 1_000_000
@@ -95,6 +95,10 @@ export async function callTelegram<T>(token: string, method: string, body: Recor
 
 export function getMe(token: string, signal?: AbortSignal) {
   return callTelegram<TelegramBotUser>(token, 'getMe', {}, signal)
+}
+
+export function getChat(token: string, chatId: string, signal?: AbortSignal) {
+  return callTelegram<TelegramChat>(token, 'getChat', { chat_id: chatId }, signal)
 }
 
 export function setWebhook(token: string, body: { url: string; secret_token: string; allowed_updates: string[]; drop_pending_updates: boolean }, signal?: AbortSignal) {

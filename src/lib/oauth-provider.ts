@@ -1,6 +1,6 @@
 export type OAuthProvider = 'google' | 'github'
 
-export type OAuthProviderAvailability = 'enabled' | 'disabled' | 'unknown'
+export type OAuthProviderAvailability = 'enabled' | 'disabled' | 'unreachable' | 'unknown'
 
 interface SupabaseBrowserConfig {
   url: string
@@ -39,7 +39,10 @@ export async function getOAuthProviderAvailability(
     if (enabled === false) return 'disabled'
     return 'unknown'
   } catch {
-    return 'unknown'
+    // A rejected fetch most commonly means the device cannot resolve or reach
+    // the Supabase Auth hostname. Keep this distinct from a valid but
+    // unexpected response so the UI can give useful DNS guidance.
+    return 'unreachable'
   } finally {
     clearTimeout(timeout)
   }

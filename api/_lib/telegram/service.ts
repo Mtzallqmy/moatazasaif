@@ -7,9 +7,9 @@ import { loadOwnedProviderCredentials } from '../provider-credentials.js'
 import { enforceRateLimitKey } from '../rate-limit.js'
 import { logTechnicalError, redactText } from '../redaction.js'
 import { recordAudit } from '../audit.js'
-import { deleteWebhook, getMe, getWebhookInfo, sendChatAction, sendMessage, setMyCommands, setWebhook } from './client.js'
+import { deleteWebhook, getChat, getMe, getWebhookInfo, sendChatAction, sendMessage, setMyCommands, setWebhook } from './client.js'
 import { generateLinkCode, generateWebhookSecret, normalizeBotToken, sha256Hex } from './security.js'
-import { chatIdFromMessage, messageFromUpdate, publicChatFields, providerMessagesFromTelegramRows, splitTelegramMessage, telegramCommand } from './messages.js'
+import { chatIdFromMessage, messageFromUpdate, publicChatFields, publicChatFieldsFromChat, providerMessagesFromTelegramRows, splitTelegramMessage, telegramCommand } from './messages.js'
 import type { TelegramBotUser, TelegramChatLinkRow, TelegramIntegrationRow, TelegramPublicChatLink, TelegramPublicIntegration, TelegramUpdate, TelegramWebhookInfo } from './types.js'
 import { TelegramApiError } from './types.js'
 
@@ -147,7 +147,7 @@ async function registerTelegramWebhook(integration: TelegramIntegrationRow, toke
   return data as TelegramIntegrationRow
 }
 
-export async function createTelegramIntegration(userId: string, input: { name: string; botToken: string; providerId: string; model: string }) {
+export async function createTelegramIntegration(userId: string, input: { name: string; botToken: string; providerId: string; model: string; telegramChatId?: string }) {
   const token = normalizeBotToken(input.botToken)
   await getTelegramProvider(userId, input.providerId, input.model)
   let bot: TelegramBotUser
@@ -157,6 +157,20 @@ export async function createTelegramIntegration(userId: string, input: { name: s
     throw new ApiError(error instanceof TelegramApiError && error.details.status === 401 ? 401 : 502, errorDescription(error), 'telegram_getme_failed')
   }
   if (!bot?.is_bot) throw new ApiError(400, 'التوكن لا يمثل Telegram Bot', 'telegram_not_a_bot')
+
+  // A supplied chat ID enables a direct setup without requiring a one-time
+  // link code. getChat is a real Telegram API check; it also gives us the
+  // canonical chat metadata to store. Telegram still requires the user to
+  // press Start before a bot can send the first message in a private chat.
+  let directChat: Awaited<ReturnType<typeof getChat>> | undefined
+  if (input.telegramChatId) {
+    try {
+      directChat = await getChat(token, input.telegramChatId)
+    } catch (error) {
+      const status = error instanceof TelegramApiError && error.details.status === 400 ? 400 : 502
+      throw new ApiError(status, status === 400 ? 'معرّف Telegram غير متاح لهذا البوت. افتح البوت واضغط Start ثم أعد المحاولة.' : errorDescription(error), 'telegram_chat_validation_failed')
+    }
+  }
 
   const secret = generateWebhookSecret()
   const now = new Date().toISOString()
@@ -192,9 +206,15 @@ export async function createTelegramIntegration(userId: string, input: { name: s
     const { data: updated, error: updateError } = await getAdminClient().from('telegram_integrations').update(fields).eq('id', integration.id).select(INTEGRATION_COLUMNS).single()
     if (updateError || !updated) throw new ApiError(500, 'تعذر حفظ حالة Webhook', 'telegram_webhook_state_failed')
     if (info.url !== webhookUrl) throw new ApiError(502, 'لم يؤكد Telegram عنوان Webhook المتوقع', 'telegram_webhook_not_confirmed')
+    if (directChat) {
+      const chatFields = publicChatFieldsFromChat(directChat)
+      const { error: chatError } = await getAdminClient().from('telegram_chat_links').upsert({ integration_id: integration.id, ...chatFields, is_allowed: true, linked_at: new Date().toISOString() }, { onConflict: 'integration_id,telegram_chat_id' })
+      if (chatError) throw new ApiError(500, 'تم تسجيل البوت لكن تعذر حفظ معرّف Telegram', 'telegram_chat_link_failed')
+      await sendText(token, String(directChat.id), 'تم ربط حسابك بنجاح. أرسل رسالتك الآن، أو استخدم /help لعرض الأوامر.').catch(() => undefined)
+    }
     await recordAudit(userId, userId, 'telegram.integration.created', { integrationId: integration.id, botId: String(bot.id), providerId: input.providerId, model: input.model.trim() })
     await recordAudit(userId, userId, 'telegram.webhook.registered', { integrationId: integration.id, webhookUrl })
-    return publicTelegramIntegration(updated as TelegramIntegrationRow)
+    return publicTelegramIntegration(updated as TelegramIntegrationRow, directChat ? await listIntegrationChats(integration.id) : [])
   } catch (error) {
     const message = errorDescription(error)
     await getAdminClient().from('telegram_integrations').update({ status: 'error', last_error_message: message, updated_at: new Date().toISOString() }).eq('id', integration.id)
@@ -203,12 +223,21 @@ export async function createTelegramIntegration(userId: string, input: { name: s
   }
 }
 
-export async function testTelegramToken(botToken: string) {
+export async function testTelegramToken(botToken: string, telegramChatId?: string) {
   const token = normalizeBotToken(botToken)
   try {
     const bot = await getMe(token)
     if (!bot?.is_bot) throw new ApiError(400, 'التوكن لا يمثل Telegram Bot', 'telegram_not_a_bot')
-    return { botId: String(bot.id), botUsername: bot.username, botFirstName: bot.first_name, message: 'تم التحقق من التوكن عبر Telegram getMe فعليًا' }
+    let chat
+    if (telegramChatId) {
+      try {
+        chat = await getChat(token, telegramChatId)
+      } catch (error) {
+        const status = error instanceof TelegramApiError && error.details.status === 400 ? 400 : 502
+        throw new ApiError(status, status === 400 ? 'معرّف Telegram غير متاح لهذا البوت. افتح البوت واضغط Start ثم أعد المحاولة.' : errorDescription(error), 'telegram_chat_validation_failed')
+      }
+    }
+    return { botId: String(bot.id), botUsername: bot.username, botFirstName: bot.first_name, chat: chat ? { id: String(chat.id), type: chat.type, username: chat.username, firstName: chat.first_name, lastName: chat.last_name, title: chat.title } : undefined, message: chat ? 'تم التحقق من التوكن ومعرّف Telegram عبر Telegram API فعليًا' : 'تم التحقق من التوكن عبر Telegram getMe فعليًا' }
   } catch (error) {
     if (error instanceof ApiError) throw error
     throw new ApiError(error instanceof TelegramApiError && error.details.status === 401 ? 401 : 502, errorDescription(error), 'telegram_getme_failed')
@@ -346,23 +375,23 @@ function commandHelp() {
   return ['/start — بدء الاستخدام', '/connect CODE — ربط هذه المحادثة بحسابك', '/help — عرض التعليمات', '/new — بدء سياق جديد', '/status — حالة المزود والنموذج'].join('\n')
 }
 
-async function sendCommand(token: string, integration: TelegramIntegrationRow, message: TelegramMessageLike, command: { command: string; args: string }) {
+async function sendCommand(token: string, integration: TelegramIntegrationRow, message: TelegramMessageLike, command: { command: string; args: string }, signal?: AbortSignal) {
   const chatId = String(message.chat.id)
-  if (command.command === 'start') return sendText(token, chatId, 'مرحبًا! اربط هذه المحادثة من داخل الموقع عبر كود /connect، ثم أرسل رسالتك.', undefined)
-  if (command.command === 'help') return sendText(token, chatId, commandHelp())
+  if (command.command === 'start') return sendText(token, chatId, 'مرحبًا! اربط هذه المحادثة من داخل الموقع عبر كود /connect، ثم أرسل رسالتك.', signal)
+  if (command.command === 'help') return sendText(token, chatId, commandHelp(), signal)
   if (command.command === 'connect') {
     const connected = await consumeLinkCode(integration.id, command.args, message)
-    return sendText(token, chatId, connected ? 'تم ربط هذه المحادثة بنجاح. أرسل رسالتك الآن.' : 'كود الربط غير صحيح أو منتهي أو مستخدم مسبقًا.')
+    return sendText(token, chatId, connected ? 'تم ربط هذه المحادثة بنجاح. أرسل رسالتك الآن.' : 'كود الربط غير صحيح أو منتهي أو مستخدم مسبقًا.', signal)
   }
   if (command.command === 'new') {
     const { data: link } = await getAdminClient().from('telegram_chat_links').select('id').eq('integration_id', integration.id).eq('telegram_chat_id', chatId).maybeSingle()
-    if (!link) return sendText(token, chatId, 'اربط المحادثة أولًا باستخدام كود /connect.')
+    if (!link) return sendText(token, chatId, 'اربط المحادثة أولًا باستخدام كود /connect أو من صفحة الربط المباشر.', signal)
     await getAdminClient().from('telegram_messages').delete().eq('integration_id', integration.id).eq('telegram_chat_id', chatId)
-    return sendText(token, chatId, 'بدأت سياقًا جديدًا لهذه المحادثة.')
+    return sendText(token, chatId, 'بدأت سياقًا جديدًا لهذه المحادثة.', signal)
   }
   if (command.command === 'status') {
-    const { data: provider } = await getAdminClient().from('providers').select('name,type,status').eq('id', integration.provider_id).maybeSingle()
-    return sendText(token, chatId, `المزود: ${provider?.name || provider?.type || 'غير معروف'}\nالنموذج: ${integration.model}\nالحالة: ${integration.status}`)
+    const { data: provider } = await getAdminClient().from('providers').select('name,type,status').eq('id', integration.provider_id).eq('user_id', integration.user_id).maybeSingle()
+    return sendText(token, chatId, `المزود: ${provider?.name || provider?.type || 'غير معروف'}\nالنموذج: ${integration.model}\nالحالة: ${integration.status}`, signal)
   }
 }
 
@@ -398,7 +427,7 @@ export async function processTelegramUpdate(integrationId: string, updateId: num
     const chatId = String(message.chat.id)
     const command = message.text ? telegramCommand(message.text) : null
     if (command) {
-      await sendCommand(token, integration, message, command)
+      await sendCommand(token, integration, message, command, controller.signal)
       await admin.from('telegram_updates').update({ status: 'processed', processed_at: new Date().toISOString() }).eq('integration_id', integrationId).eq('update_id', updateId)
       return
     }

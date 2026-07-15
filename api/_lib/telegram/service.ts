@@ -195,11 +195,13 @@ export async function createTelegramIntegration(userId: string, input: { name: s
   }
 
   const integration = inserted as TelegramIntegrationRow
+  let webhookConfigured = false
   try {
     // The initial secret is passed once to Telegram. It is stored only as a
     // hash, so re-registration always rotates it through the PATCH action.
     const webhookUrl = getTelegramWebhookUrl()
     await setWebhook(token, { url: webhookUrl, secret_token: secret, allowed_updates: ['message', 'callback_query'], drop_pending_updates: false })
+    webhookConfigured = true
     await setMyCommands(token, BOT_COMMANDS)
     const info = await getWebhookInfo(token)
     const fields = { webhook_url: webhookUrl, status: info.url === webhookUrl ? 'connected' : 'error', ...webhookUpdateFields(info), updated_at: new Date().toISOString() }
@@ -217,7 +219,13 @@ export async function createTelegramIntegration(userId: string, input: { name: s
     return publicTelegramIntegration(updated as TelegramIntegrationRow, directChat ? await listIntegrationChats(integration.id) : [])
   } catch (error) {
     const message = errorDescription(error)
-    await getAdminClient().from('telegram_integrations').update({ status: 'error', last_error_message: message, updated_at: new Date().toISOString() }).eq('id', integration.id)
+    if (webhookConfigured) {
+      try { await deleteWebhook(token, false) } catch (cleanupError) { logTechnicalError('[telegram-create-cleanup-failed]', cleanupError, { integrationId: integration.id, userId }) }
+    }
+    // Do not leave an unusable row that blocks a retry through the unique
+    // (user_id, bot_id) constraint. The token was never returned to the
+    // client, and the encrypted row is removed by this ownership-scoped delete.
+    await getAdminClient().from('telegram_integrations').delete().eq('id', integration.id).eq('user_id', userId)
     await recordAudit(userId, userId, 'telegram.webhook.failed', { integrationId: integration.id, error: message })
     throw error instanceof ApiError ? error : new ApiError(error instanceof TelegramApiError && error.details.status === 401 ? 401 : 502, message, 'telegram_webhook_registration_failed')
   }

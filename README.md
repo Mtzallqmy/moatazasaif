@@ -139,11 +139,11 @@ npm run check
 
 1. من **Authentication → Providers** فعّل Google و/أو GitHub وأدخل Client ID وClient Secret.
 2. في Google Cloud Console وGitHub OAuth App استخدم عنوان callback الخاص بمشروع Supabase:
-   `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
+   `https://bsmzknhkzepaqeffrfbc.supabase.co/auth/v1/callback`
 3. من **Authentication → URL Configuration** اضبط Site URL على `https://moatazasaif.vercel.app` وأضف Redirect URL نفسه مع `/login`.
 4. اطلب تسجيلًا جديدًا بعد التغيير؛ الروابط القديمة التي تحتوي `localhost` لا تتغير بأثر رجعي.
 
-إذا ظهر خطأ `provider is not enabled` فالمشكلة إعداد OAuth في Supabase، وليست في واجهة الموقع.
+تتحقق الواجهة من حالة المزوّد قبل مغادرة الموقع، لذلك لن تعرض صفحة JSON الخام عند تعطيله. إذا ظهر تنبيه أن المزوّد غير مفعّل، أكمل بيانات OAuth في Supabase أولًا.
 
 ### نشر Vercel
 

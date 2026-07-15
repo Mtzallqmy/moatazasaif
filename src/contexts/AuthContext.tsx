@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import type { User } from '../types'
 import { apiJson, authHeaders } from '../lib/api'
-import { supabase } from '../lib/supabase'
+import { getSupabaseBrowserConfig, supabase } from '../lib/supabase'
 import { getAuthRedirectUrl } from '../lib/auth-redirect'
+import { getOAuthProviderAvailability, type OAuthProvider } from '../lib/oauth-provider'
+
+export type { OAuthProvider } from '../lib/oauth-provider'
 
 interface AuthContextType {
   user: User | null
@@ -18,8 +21,6 @@ interface AuthContextType {
   changePassword: (password: string) => Promise<boolean>
   refreshUser: () => Promise<void>
 }
-
-export type OAuthProvider = 'google' | 'github'
 
 interface ApiSession {
   access_token: string
@@ -109,6 +110,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false
     }
     try {
+      const browserConfig = getSupabaseBrowserConfig()
+      if (!browserConfig) throw new Error('إعدادات Supabase العامة غير مكتملة')
+
+      const availability = await getOAuthProviderAvailability(browserConfig, provider)
+      if (availability === 'disabled') {
+        toast.error(`تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} غير مفعّل حاليًا. أكمِل إعداد المزوّد في Supabase ثم أعد المحاولة.`)
+        return false
+      }
+      if (availability === 'unknown') {
+        toast.error('تعذر التحقق من إعدادات تسجيل الدخول الآن. تحقق من اتصال Supabase ثم أعد المحاولة.')
+        return false
+      }
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

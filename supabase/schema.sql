@@ -2,6 +2,9 @@
 -- Idempotent: safe to re-run from Supabase SQL Editor.
 
 create extension if not exists pgcrypto;
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated, service_role;
 
 -- Remove unsafe artifacts from older project revisions.
 drop trigger if exists ensure_last_owner on auth.users;
@@ -172,8 +175,10 @@ alter table public.providers add constraint providers_protocol_check
 create index if not exists providers_user_id_idx on public.providers(user_id);
 
 -- Field-level protection: browser clients never receive encrypted_key.
--- This helper is used only by chat RLS to verify provider ownership.
-create or replace function public.owns_provider(p_provider_id uuid)
+-- This helper is kept outside the exposed public schema and is used only by
+-- chat RLS to verify provider ownership.
+drop function if exists public.owns_provider(uuid) cascade;
+create or replace function private.owns_provider(p_provider_id uuid)
 returns boolean
 language sql
 stable
@@ -188,8 +193,8 @@ as $$
   );
 $$;
 
-revoke all on function public.owns_provider(uuid) from public, anon;
-grant execute on function public.owns_provider(uuid) to authenticated;
+revoke all on function private.owns_provider(uuid) from public, anon;
+grant execute on function private.owns_provider(uuid) to authenticated;
 
 -- =========================================================
 -- Chats and messages
@@ -218,7 +223,10 @@ create table if not exists public.messages (
 );
 
 create index if not exists chats_user_updated_idx on public.chats(user_id, updated_at desc);
+create index if not exists chats_provider_id_idx on public.chats(provider_id) where provider_id is not null;
 create index if not exists messages_chat_created_idx on public.messages(chat_id, created_at);
+create index if not exists messages_user_id_idx on public.messages(user_id);
+create index if not exists profiles_created_by_idx on public.profiles(created_by) where created_by is not null;
 
 -- =========================================================
 -- Telegram Bot integrations (server-only secrets)
@@ -438,13 +446,13 @@ create policy chats_owner_select on public.chats for select to authenticated usi
 create policy chats_owner_insert on public.chats for insert to authenticated
 with check (
   (select auth.uid()) = user_id
-  and (provider_id is null or (select public.owns_provider(provider_id)))
+  and (provider_id is null or (select private.owns_provider(provider_id)))
 );
 create policy chats_owner_update on public.chats for update to authenticated
 using ((select auth.uid()) = user_id)
 with check (
   (select auth.uid()) = user_id
-  and (provider_id is null or (select public.owns_provider(provider_id)))
+  and (provider_id is null or (select private.owns_provider(provider_id)))
 );
 create policy chats_owner_delete on public.chats for delete to authenticated using ((select auth.uid()) = user_id);
 

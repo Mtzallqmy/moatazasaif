@@ -229,6 +229,30 @@ create index if not exists messages_user_id_idx on public.messages(user_id);
 create index if not exists profiles_created_by_idx on public.profiles(created_by) where created_by is not null;
 
 -- =========================================================
+-- GitHub and WhatsApp integrations (server-only secrets)
+-- =========================================================
+create table if not exists public.external_integrations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('github', 'whatsapp')),
+  name text not null check (char_length(name) between 1 and 80),
+  encrypted_credentials jsonb not null,
+  config jsonb not null default '{}'::jsonb check (jsonb_typeof(config) = 'object'),
+  external_account_id text not null check (char_length(external_account_id) between 1 and 200),
+  external_account_name text check (external_account_name is null or char_length(external_account_name) between 1 and 300),
+  is_enabled boolean not null default true,
+  status text not null default 'connected' check (status in ('connected', 'error', 'disabled')),
+  last_checked_at timestamptz,
+  last_error_message text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, kind, external_account_id)
+);
+
+create index if not exists external_integrations_user_created_idx
+  on public.external_integrations(user_id, created_at desc);
+
+-- =========================================================
 -- Telegram Bot integrations (server-only secrets)
 -- =========================================================
 create table if not exists public.telegram_integrations (
@@ -413,6 +437,7 @@ alter table public.profiles enable row level security;
 alter table public.providers enable row level security;
 alter table public.chats enable row level security;
 alter table public.messages enable row level security;
+alter table public.external_integrations enable row level security;
 alter table public.telegram_integrations enable row level security;
 alter table public.telegram_chat_links enable row level security;
 alter table public.telegram_link_codes enable row level security;
@@ -481,5 +506,7 @@ revoke all on public.providers from authenticated;
 revoke all on public.profiles, public.providers, public.chats, public.messages, public.audit_logs from anon;
 revoke all on public.audit_logs from authenticated;
 revoke all on public.api_rate_limits from public, anon, authenticated;
+revoke all on public.external_integrations from public, anon, authenticated;
 revoke all on public.telegram_integrations, public.telegram_chat_links, public.telegram_link_codes, public.telegram_updates, public.telegram_messages from public, anon, authenticated;
+grant all on public.external_integrations to service_role;
 grant all on public.telegram_integrations, public.telegram_chat_links, public.telegram_link_codes, public.telegram_updates, public.telegram_messages to service_role;

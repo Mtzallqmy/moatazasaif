@@ -4,6 +4,7 @@ import { Eye, EyeOff, ArrowLeft, Mail } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { toast } from 'sonner'
 import OAuthButtons from '../components/OAuthButtons'
+import { clearAuthCallbackFailure, readAuthCallbackFailure } from '../lib/auth-callback-error'
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('')
@@ -16,6 +17,13 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as any)?.from?.pathname || '/dashboard'
+
+  useEffect(() => {
+    const failure = readAuthCallbackFailure(window.location.search, window.location.hash)
+    if (!failure) return
+    toast.error(failure.message, { duration: 12_000 })
+    clearAuthCallbackFailure()
+  }, [])
 
   useEffect(() => {
     if (user) navigate(from, { replace: true })

@@ -1,23 +1,28 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
-import Landing from './pages/Landing'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import Dashboard from './pages/Dashboard'
-import Chat from './pages/Chat'
-import Providers from './pages/Providers'
-import Integrations from './pages/Integrations'
-import Settings from './pages/Settings'
-import AdminUsers from './pages/AdminUsers'
-import Privacy from './pages/Privacy'
-import Terms from './pages/Terms'
-import NotFound from './pages/NotFound'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import type { AppRole } from './types'
+
+const Landing = lazy(() => import('./pages/Landing'))
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Chat = lazy(() => import('./pages/Chat'))
+const Providers = lazy(() => import('./pages/Providers'))
+const Integrations = lazy(() => import('./pages/Integrations'))
+const Settings = lazy(() => import('./pages/Settings'))
+const AdminUsers = lazy(() => import('./pages/AdminUsers'))
+const Privacy = lazy(() => import('./pages/Privacy'))
+const Terms = lazy(() => import('./pages/Terms'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+
+function PageFallback() {
+  return <div className="min-h-screen flex items-center justify-center bg-dark-950"><div className="flex flex-col items-center gap-4"><div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" /><p className="text-dark-400 text-sm">جارٍ تحميل الصفحة...</p></div></div>
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
@@ -49,7 +54,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 const protectedPage = (page: React.ReactNode) => <ProtectedRoute><AppLayout>{page}</AppLayout></ProtectedRoute>
 
 export default function App() {
-  return <ThemeProvider><AuthProvider><Routes>
+  return <ThemeProvider><AuthProvider><Suspense fallback={<PageFallback />}><Routes>
     <Route path="/" element={<Landing />} />
     <Route path="/login" element={<Login />} />
     <Route path="/register" element={<Register />} />
@@ -63,5 +68,5 @@ export default function App() {
     <Route path="/settings" element={protectedPage(<Settings />)} />
     <Route path="/admin/users" element={protectedPage(<RoleRoute roles={['owner', 'admin']}><AdminUsers /></RoleRoute>)} />
     <Route path="*" element={<NotFound />} />
-  </Routes></AuthProvider></ThemeProvider>
+  </Routes></Suspense></AuthProvider></ThemeProvider>
 }

@@ -6,8 +6,9 @@
 2. نفّذ `supabase/schema.sql` كاملًا في SQL Editor.
 3. للمشروع الموجود، نفّذ أيضًا `supabase/migrations/20260714190000_byok_provider_protocol.sql` (يمكن تكراره بأمان).
 4. نفّذ migration Telegram الجديدة `supabase/migrations/20260714203349_telegram_integrations.sql`.
-5. تأكد أن التنفيذ انتهى دون أخطاء.
-6. لا تمنح `authenticated` أو `anon` صلاحيات مباشرة على جداول الأسرار أو جدول `providers`؛ الإدارة تتم عبر API الخادمي فقط.
+5. نفّذ migration الاتصالات `supabase/migrations/20260715222138_external_integrations.sql`.
+6. تأكد أن التنفيذ انتهى دون أخطاء.
+7. لا تمنح `authenticated` أو `anon` صلاحيات مباشرة على جداول الأسرار أو جدولي `providers` و`external_integrations`؛ الإدارة تتم عبر API الخادمي فقط.
 
 ## 2. متغيرات Vercel
 
@@ -58,9 +59,11 @@ BOOTSTRAP_TOKEN=رمز-عشوائي-طويل-جداً
 - راجع Network response وVercel logs وتأكد من عدم وجود `apiKey` أو Authorization أو `encrypted_key`.
 - أنشئ Bot من BotFather، اختبر `getMe`، سجّل Webhook، ثم نفّذ فحص Webhook من صفحة التكاملات وتحقق من معلومات البوت الفعلية.
 - ولّد كود الربط، أرسل `/connect CODE` إلى البوت، ثم أرسل رسالة عادية وتحقق من وصول رد النموذج الحقيقي.
+- من صفحة التكاملات اختبر Fine-grained GitHub PAT ثم احفظه واعرض قائمة المستودعات.
+- إذا توفرت بيانات Meta، اختبر System User token وPhone Number ID ثم أرسل رسالة WhatsApp إلى رقم تجريبي بصيغة دولية.
 
 ## 5. حدود النسخة الحالية
 
 - لا يوجد نظام دفع أو اشتراكات داخلية.
-- GitHub وMCP ووضع الوكيل غير مفعلة. Telegram منفذ فعليًا عبر Webhook، بينما حدّ rate limit الخاص بالـ Webhook والمعالجة يعتمد على limiter PostgreSQL.
+- GitHub مفعّل للاختبار وعرض المستودعات، وWhatsApp مفعّل للاختبار والإرسال النصي. عمليات GitHub الكتابية واستقبال WhatsApp وMCP ووضع الوكيل تبقى غير مفعّلة حتى تعريف صلاحياتها وأسرارها المطلوبة.
 - الاختبارات الآلية لا تتصل بمفاتيح مزودات حقيقية؛ اختبار الاتصال الحقيقي يتم بعد إضافة مفاتيحك من لوحة المزودات.

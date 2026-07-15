@@ -110,8 +110,13 @@ export function getTelegramRuntimeEnv() {
 }
 
 export function getTelegramWebhookUrl() {
+  // APP_URL remains the preferred explicit configuration. The production
+  // alias is a safe fallback so a newly connected bot cannot silently fail
+  // just because a Vercel environment variable was omitted. Preview/custom
+  // domains should still set APP_URL explicitly.
   const appUrl = getTelegramRuntimeEnv().APP_URL
-  if (!appUrl) throw new Error('APP_URL مطلوب لتسجيل Telegram Webhook')
+    || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined)
+    || 'https://moatazasaif.vercel.app'
   const url = new URL('/api/integrations/telegram/webhook', appUrl)
   if (url.protocol !== 'https:') throw new Error('APP_URL يجب أن يستخدم HTTPS لتسجيل Telegram Webhook')
   return url.toString()

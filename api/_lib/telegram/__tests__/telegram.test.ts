@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resetEnvCacheForTests } from '../../env.js'
-import { callTelegram, deleteWebhook, getMe, getWebhookInfo, sendChatAction, sendMessage, setMyCommands, setWebhook } from '../client.js'
+import { callTelegram, deleteWebhook, getChat, getMe, getWebhookInfo, sendChatAction, sendMessage, setMyCommands, setWebhook } from '../client.js'
 import { generateLinkCode, normalizeBotToken, sha256Hex } from '../security.js'
 import { splitTelegramMessage } from '../messages.js'
 import { telegramUpdateSchema } from '../types.js'
+import { testTelegramToken } from '../service.js'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -51,19 +52,21 @@ describe('Telegram security and client', () => {
       const body = JSON.parse(String(init.body || '{}')) as Record<string, unknown>
       const method = String(_url).split('/').pop()
       if (method === 'getMe') return new Response(JSON.stringify({ ok: true, result: { id: 7, is_bot: true, first_name: 'Bot' } }))
+      if (method === 'getChat') return new Response(JSON.stringify({ ok: true, result: { id: '9', type: 'private', first_name: 'User' } }))
       if (method === 'getWebhookInfo') return new Response(JSON.stringify({ ok: true, result: { url: 'https://example.com/api/integrations/telegram/webhook', pending_update_count: 0 } }))
       expect(body).toBeDefined()
       return new Response(JSON.stringify({ ok: true, result: true }))
     })
     vi.stubGlobal('fetch', fetchMock)
     await expect(getMe(token)).resolves.toMatchObject({ id: 7 })
+    await expect(getChat(token, '9')).resolves.toMatchObject({ id: '9', type: 'private' })
     await expect(setWebhook(token, { url: 'https://example.com/api/integrations/telegram/webhook', secret_token: 'hashed-secret', allowed_updates: ['message'], drop_pending_updates: false })).resolves.toBe(true)
     await expect(getWebhookInfo(token)).resolves.toMatchObject({ pending_update_count: 0 })
     await expect(deleteWebhook(token)).resolves.toBe(true)
     await expect(sendChatAction(token, { chat_id: '9', action: 'typing' })).resolves.toBe(true)
     await expect(sendMessage(token, { chat_id: '9', text: 'hello' })).resolves.toBe(true)
     await expect(setMyCommands(token, [{ command: 'start', description: 'Start' }])).resolves.toBe(true)
-    expect(fetchMock).toHaveBeenCalledTimes(7)
+    expect(fetchMock).toHaveBeenCalledTimes(8)
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: false, error_code: 401, description: `invalid token ${token}` }), { status: 401 })))
     const failure = await getMe(token).catch((error: unknown) => error)
@@ -74,5 +77,19 @@ describe('Telegram security and client', () => {
   it('validates webhook update shape and rejects missing update ids', () => {
     expect(telegramUpdateSchema.safeParse({ update_id: 4, message: { message_id: 2, chat: { id: 9, type: 'private' }, text: 'hi' } }).success).toBe(true)
     expect(telegramUpdateSchema.safeParse({ message: {} }).success).toBe(false)
+  })
+
+  it('validates a direct Telegram chat ID with real getMe/getChat calls', async () => {
+    const token = '123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ123456'
+    const fetchMock = vi.fn(async (url: string) => {
+      const method = url.split('/').pop()
+      if (method === 'getMe') return new Response(JSON.stringify({ ok: true, result: { id: 7, is_bot: true, first_name: 'Bot' } }))
+      return new Response(JSON.stringify({ ok: true, result: { id: '55', type: 'private', first_name: 'Owner' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await testTelegramToken(token, '55')
+    expect(result.chat).toMatchObject({ id: '55', type: 'private' })
+    expect(JSON.stringify(result)).not.toContain(token)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

@@ -3,15 +3,17 @@ import { z } from 'zod'
 const uuid = z.string().uuid()
 const name = z.string().trim().min(1).max(80)
 const model = z.string().trim().min(1).max(300)
+const telegramChatId = z.string().trim().regex(/^-?\d{1,32}$/, 'معرّف محادثة Telegram غير صالح')
 
 export const telegramCreateSchema = z.object({
   name,
   botToken: z.string().trim().min(20).max(300),
   providerId: uuid,
   model,
+  telegramChatId: telegramChatId.optional(),
 }).strict()
 
-export const telegramTestSchema = z.object({ botToken: z.string().trim().min(20).max(300) }).strict()
+export const telegramTestSchema = z.object({ botToken: z.string().trim().min(20).max(300), telegramChatId: telegramChatId.optional() }).strict()
 export const telegramLinkCodeSchema = z.object({ integrationId: uuid }).strict()
 export const telegramDiagnoseSchema = z.object({ integrationId: uuid }).strict()
 

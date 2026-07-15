@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getServerEnv, resetEnvCacheForTests } from '../env.js'
+import { getServerEnv, getTelegramWebhookUrl, resetEnvCacheForTests } from '../env.js'
 
 const snapshot = { ...process.env }
 
@@ -27,5 +27,18 @@ describe('server environment', () => {
     expect(env.supabasePublishableKey).toBe('sb_publishable_placeholder_1234567890')
     expect(env.BOOTSTRAP_TOKEN).toBeUndefined()
     expect(env.APP_URL).toBeUndefined()
+  })
+
+  it('uses the production alias for Telegram when APP_URL is omitted', () => {
+    Object.assign(process.env, {
+      NODE_ENV: 'test',
+      APP_URL: '',
+      TELEGRAM_API_TIMEOUT_MS: '15000',
+      TELEGRAM_WEBHOOK_PROCESSING_TIMEOUT_MS: '45000',
+      TELEGRAM_MAX_CONTEXT_MESSAGES: '20',
+      TELEGRAM_MAX_RESPONSE_CHARACTERS: '16000',
+    })
+    resetEnvCacheForTests()
+    expect(getTelegramWebhookUrl()).toBe('https://moatazasaif.vercel.app/api/integrations/telegram/webhook')
   })
 })

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import type { User } from '../types'
 import { apiJson, authHeaders } from '../lib/api'
 import { supabase } from '../lib/supabase'
+import { getAuthRedirectUrl } from '../lib/auth-redirect'
 
 interface AuthContextType {
   user: User | null
@@ -25,31 +26,6 @@ interface ApiSession {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-const PRODUCTION_APP_URL = 'https://moatazasaif.vercel.app'
-
-function isLocalOrigin(value: string) {
-  try {
-    const url = new URL(value)
-    return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
-  } catch {
-    return true
-  }
-}
-
-function getAuthRedirectUrl() {
-  const configured = import.meta.env.VITE_APP_URL || import.meta.env.NEXT_PUBLIC_APP_URL
-  const current = typeof window !== 'undefined' ? window.location.origin : ''
-  const candidate = configured?.trim() || (!isLocalOrigin(current) ? current : PRODUCTION_APP_URL)
-
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'https:' || isLocalOrigin(url.origin)) return `${PRODUCTION_APP_URL}/login`
-    return `${url.origin}/login`
-  } catch {
-    return `${PRODUCTION_APP_URL}/login`
-  }
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)

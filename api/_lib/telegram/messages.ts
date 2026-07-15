@@ -1,5 +1,5 @@
 import type { ProviderChatMessage } from '../providers/types.js'
-import type { TelegramMessage, TelegramUpdate } from './types.js'
+import type { TelegramChat, TelegramMessage, TelegramUpdate } from './types.js'
 
 export const TELEGRAM_MAX_MESSAGE_LENGTH = 4_096
 
@@ -56,6 +56,18 @@ export function publicChatFields(message: TelegramMessage) {
     first_name: message.chat.first_name || null,
     last_name: message.chat.last_name || null,
     title: message.chat.title || null,
+  }
+}
+
+export function publicChatFieldsFromChat(chat: TelegramChat) {
+  return {
+    telegram_chat_id: String(chat.id),
+    telegram_user_id: chat.type === 'private' ? String(chat.id) : null,
+    chat_type: chat.type,
+    username: chat.username || null,
+    first_name: chat.first_name || null,
+    last_name: chat.last_name || null,
+    title: chat.title || null,
   }
 }
 

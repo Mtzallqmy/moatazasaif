@@ -3,12 +3,33 @@ import type { Chat, Message, Provider } from '../types'
 import { resolveProviderProtocol } from '../../shared/provider-registry'
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL) as string | undefined
-const supabaseKey = (
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-  || import.meta.env.VITE_SUPABASE_ANON_KEY
-  || import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  || import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-) as string | undefined
+
+function validBrowserKey(value: string | undefined, url: string | undefined) {
+  const key = value?.trim()
+  if (!key || !url) return false
+  if (/^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(key)) return true
+  const parts = key.split('.')
+  if (parts.length !== 3) return false
+  try {
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = JSON.parse(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, '='))) as { iss?: string; ref?: string; role?: string }
+    const projectRef = new URL(url).hostname.split('.')[0]
+    return decoded.iss === 'supabase' && decoded.ref === projectRef && decoded.role === 'anon'
+  } catch {
+    return false
+  }
+}
+
+// Prefer modern publishable keys across both supported naming conventions.
+// Legacy anon JWTs are accepted only when their issuer, role and project ref
+// match the configured Supabase URL, preventing a malformed/stale key from
+// shadowing a valid publishable key.
+const supabaseKey = [
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+].find((key) => validBrowserKey(key, supabaseUrl))
 
 export const supabase: SupabaseClient | null = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey, {

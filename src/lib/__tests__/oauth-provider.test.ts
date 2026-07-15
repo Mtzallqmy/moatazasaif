@@ -26,11 +26,11 @@ describe('OAuth provider preflight', () => {
     await expect(getOAuthProviderAvailability(config, 'github', fetcher)).resolves.toBe('disabled')
   })
 
-  it('fails closed when Auth settings cannot be verified', async () => {
+  it('fails closed and distinguishes an unreachable Auth host', async () => {
     const unavailable = vi.fn(async () => new Response('unavailable', { status: 503 }))
     const networkFailure = vi.fn(async () => { throw new Error('network failure') })
 
     await expect(getOAuthProviderAvailability(config, 'google', unavailable)).resolves.toBe('unknown')
-    await expect(getOAuthProviderAvailability(config, 'google', networkFailure)).resolves.toBe('unknown')
+    await expect(getOAuthProviderAvailability(config, 'google', networkFailure)).resolves.toBe('unreachable')
   })
 })

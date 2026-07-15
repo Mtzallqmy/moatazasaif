@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const login = async (identifier: string, password: string) => {
-    if (!supabase) { toast.error('إعدادات Supabase غير موجودة؛ يمكنك استخدام وضع الجلسة المؤقتة دون حساب.'); return false }
+    if (!supabase) { toast.error('إعدادات Supabase العامة غير صالحة أو لا تطابق المشروع. راجع VITE_SUPABASE_URL ومفتاح النشر العام في Vercel.'); return false }
     try {
       const body = await apiJson<{ session: ApiSession; user: User }>('/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier, password }),
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const requestMagicLink = async (email: string) => {
-    if (!supabase) { toast.error('إعدادات Supabase غير موجودة'); return false }
+    if (!supabase) { toast.error('إعدادات Supabase العامة غير صالحة أو لا تطابق المشروع. راجع VITE_SUPABASE_URL ومفتاح النشر العام في Vercel.'); return false }
     try {
       const normalizedEmail = email.trim().toLowerCase()
       if (!normalizedEmail || !normalizedEmail.includes('@')) throw new Error('أدخل بريدًا إلكترونيًا صالحًا')

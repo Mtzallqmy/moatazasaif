@@ -37,6 +37,12 @@ export const supabase: SupabaseClient | null = supabaseUrl && supabaseKey
     })
   : null
 
+export function getSupabaseBrowserConfig() {
+  return supabaseUrl && supabaseKey
+    ? { url: supabaseUrl, publishableKey: supabaseKey }
+    : null
+}
+
 export function requireSupabase() {
   if (!supabase) {
     return null

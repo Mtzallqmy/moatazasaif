@@ -12,7 +12,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const auth = await authenticate(req)
     await enforceRateLimit(req, 'telegram_test', 20, 300, auth.user.id)
-    return res.status(200).json(await testTelegramToken(parseRequest(telegramTestSchema, req.body).botToken))
+    const body = parseRequest(telegramTestSchema, req.body)
+    return res.status(200).json(await testTelegramToken(body.botToken, body.telegramChatId))
   } catch (error) {
     return sendError(res, error)
   }

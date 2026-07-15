@@ -17,6 +17,7 @@
 - محادثات ورسائل محفوظة في Supabase ومعزولة بسياسات RLS.
 - تقييد ذري للطلبات داخل PostgreSQL لمسارات الدخول والإدارة والمزودات والمحادثة.
 - `/api/health` و`/api/ready` للفحص التشغيلي؛ readiness يتحقق أيضًا من قاعدة البيانات وخدمة التقييد.
+- Telegram Webhook حقيقي، واتصالات GitHub وWhatsApp Cloud API تُختبر من الخادم وتُحفظ مشفّرة دون إعادة التوكن إلى المتصفح.
 
 ## وضعا BYOK
 
@@ -168,7 +169,16 @@ npm run check
 
 - حدّ rate limit للجلسة المؤقتة يستخدم limiter الذري في PostgreSQL عند ضبط Supabase في الإنتاج، ولا يرسل سوى بصمات HMAC غير قابلة للعكس. يبقى fallback داخل Function لتشغيل وضع الجلسة بالكامل دون Supabase، مع توصية بإبقاء Vercel Firewall/WAF طبقة دفاع إضافية.
 - نجاح اختبار المزود يعتمد على استجابة API فعلية. إذا لم تدعم البوابة `/models`، يُستخدم النموذج الذي أدخله المستخدم لطلب توليد فعلي، ولا تُخمن صحة المفتاح من شكله.
-- GitHub وAgent Loop غير مفعّلين في هذه النسخة. MCP ليس قناة Telegram بديلة؛ يمكن إضافته لاحقًا كواجهة أدوات موثقة للعملاء الخارجيين فوق نفس Provider Runtime، بينما Telegram يعمل الآن عبر Webhook حقيقي.
+- GitHub مفعّل لاختبار الحساب وعرض المستودعات عبر Fine-grained PAT مشفّر. عمليات الكتابة الآلية الواسعة تحتاج GitHub App وصلاحيات محددة قبل تفعيلها. MCP وAgent Loop غير مفعّلين بعد.
+
+## تكاملات GitHub وWhatsApp
+
+نفّذ migration `supabase/migrations/20260715222138_external_integrations.sql` للمشاريع الموجودة. جدول `external_integrations` خادمي فقط: RLS مفعّل وصلاحيات `anon` و`authenticated` مسحوبة، وتُشفّر بيانات الاعتماد بـ AES-256-GCM.
+
+- GitHub: استخدم Fine-grained personal access token محدودًا بالمستودعات والصلاحيات اللازمة. تختبر الواجهة `/user` فعليًا، وبعد الحفظ يمكن فحص الاتصال وعرض المستودعات المتاحة.
+- WhatsApp: استخدم Meta System User permanent access token وPhone Number ID. تختبر الواجهة الرقم فعليًا ويمكنها إرسال رسالة نصية تجريبية مؤكدة من Cloud API.
+- استقبال WhatsApp غير مفعّل حتى توفير App Secret وVerify Token وتوقيع Webhook. لا تُعرض حالة استقبال وهمية.
+- لا تضع أي توكن في GitHub أو localStorage أو متغير `VITE_*`.
 
 ## تكامل Telegram Bot الحقيقي
 

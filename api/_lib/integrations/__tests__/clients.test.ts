@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { listGitHubRepositories, testGitHubToken } from '../github.js'
+import { readIntegrationJson } from '../http.js'
 import { sendWhatsAppText, testWhatsAppCredentials } from '../whatsapp.js'
 
 const githubToken = `github_pat_${'a'.repeat(30)}`
@@ -37,5 +38,24 @@ describe('external integration clients', () => {
   it('does not reflect a rejected credential in errors', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ message: 'Bad credentials' }), { status: 401 })) as unknown as typeof fetch
     await expect(testGitHubToken(githubToken, fetcher)).rejects.not.toThrow(githubToken)
+  })
+
+  it('redacts credentials even when an upstream error echoes them', async () => {
+    const githubFetcher = vi.fn(async () => new Response(JSON.stringify({ message: `gateway echoed ${githubToken}` }), { status: 500 })) as unknown as typeof fetch
+    await expect(testGitHubToken(githubToken, githubFetcher)).rejects.not.toThrow(githubToken)
+
+    const whatsappFetcher = vi.fn(async () => new Response(JSON.stringify({ error: { message: `gateway echoed ${whatsappToken}` } }), { status: 400 })) as unknown as typeof fetch
+    await expect(testWhatsAppCredentials(whatsappToken, '123456789', 'v25.0', whatsappFetcher)).rejects.not.toThrow(whatsappToken)
+  })
+
+  it('stops reading an oversized integration response stream', async () => {
+    const oversized = new Uint8Array(1_000_001)
+    const response = new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(oversized)
+        controller.close()
+      },
+    }), { status: 200 })
+    await expect(readIntegrationJson(response)).rejects.toMatchObject({ code: 'integration_response_too_large' })
   })
 })

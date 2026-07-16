@@ -2,8 +2,9 @@ import { createClient, type SupabaseClient, type User as AuthUser } from '@supab
 import type { VercelRequest } from './vercel.js'
 import { ApiError, getBearerToken } from './http.js'
 import { getServerEnv } from './env.js'
+import { normalizeUserPreferences, type UserPreferences } from '../../shared/user-preferences.js'
 
-export type AppRole = 'owner' | 'admin' | 'supervisor' | 'user'
+export type AppRole = 'owner' | 'admin' | 'manager' | 'editor' | 'user'
 
 export interface ProfileRow {
   id: string
@@ -18,6 +19,7 @@ export interface ProfileRow {
   last_login_at: string | null
   created_at: string
   updated_at: string
+  preferences: UserPreferences
 }
 
 let adminClient: SupabaseClient | undefined
@@ -94,6 +96,7 @@ export function publicUser(user: AuthUser, profile: ProfileRow) {
     roles: [profile.role],
     isActive: profile.is_active,
     forcePasswordChange: profile.must_change_password,
+    preferences: normalizeUserPreferences(profile.preferences),
     createdAt: profile.created_at || user.created_at,
   }
 }

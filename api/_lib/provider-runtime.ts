@@ -9,6 +9,7 @@ import { geminiAdapter } from './providers/gemini.js'
 import { normalizeProviderError, sanitizeProviderEndpoint } from './providers/http.js'
 import { openAiCompatibleAdapter } from './providers/openai-compatible.js'
 import type { NormalizedProviderError, ProviderAdapter, ProviderChatMessage, ProviderConfig, ProviderStreamEvent } from './providers/types.js'
+import { assertMultimodalSupport } from './providers/multimodal.js'
 
 export type { ProviderProtocol, ProviderStreamEvent }
 export type ChatMessage = ProviderChatMessage
@@ -249,6 +250,7 @@ export async function testProviderConnection(provider: ProviderRecord, apiKey: s
 export async function generateProviderText(provider: ProviderRecord, apiKey: string, model: string, messages: ProviderChatMessage[], signal?: AbortSignal) {
   const config = providerConfig(provider, apiKey)
   await assertSafeProviderUrl(config.baseUrl)
+  assertMultimodalSupport(config.protocol, model, messages)
   const result = await adapterFor(config.protocol).generateText(config, model, messages, signal)
   return { ...result, tokens: result.usage.totalTokens }
 }
@@ -256,5 +258,6 @@ export async function generateProviderText(provider: ProviderRecord, apiKey: str
 export async function* streamProviderText(provider: ProviderRecord, apiKey: string, model: string, messages: ProviderChatMessage[], signal?: AbortSignal) {
   const config = providerConfig(provider, apiKey)
   await assertSafeProviderUrl(config.baseUrl)
+  assertMultimodalSupport(config.protocol, model, messages)
   yield* adapterFor(config.protocol).streamText(config, model, messages, signal)
 }

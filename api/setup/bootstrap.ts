@@ -5,6 +5,7 @@ import { ApiError, methodNotAllowed, normalizeEmail, optionalString, sendError, 
 import { getAdminClient } from '../_lib/supabase.js'
 import { findAuthUserByEmail } from '../_lib/users.js'
 import { enforceRateLimit } from '../_lib/rate-limit.js'
+import { isOwnerEmail } from '../_lib/access.js'
 
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left)
@@ -21,7 +22,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const env = getServerEnv()
     if (!env.BOOTSTRAP_TOKEN) throw new ApiError(404, 'مسار التهيئة غير مفعّل', 'bootstrap_disabled')
 
-    const suppliedToken = String(req.headers['x-bootstrap-token'] || req.body?.token || '')
+    // Secrets belong in headers so request-body capture cannot retain the
+    // one-time bootstrap credential. The documented flow already uses this.
+    const suppliedToken = String(req.headers['x-bootstrap-token'] || '')
     if (!safeEqual(suppliedToken, env.BOOTSTRAP_TOKEN)) {
       throw new ApiError(401, 'رمز التهيئة غير صحيح', 'invalid_bootstrap_token')
     }
@@ -32,6 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if ((count || 0) > 0) throw new ApiError(409, 'يوجد مالك نشط بالفعل؛ تم تعطيل التهيئة الأولى', 'already_bootstrapped')
 
     const email = normalizeEmail(optionalString(req.body?.email, 254) || env.BOOTSTRAP_OWNER_EMAIL)
+    if (!isOwnerEmail(email)) throw new ApiError(403, 'بريد المالك غير موجود في قائمة الملكية المعتمدة', 'owner_email_restricted')
     const password = optionalString(req.body?.password, 4096) || env.BOOTSTRAP_OWNER_PASSWORD
     if (!password || password.length < 8) {
       throw new ApiError(400, 'اضبط BOOTSTRAP_OWNER_PASSWORD أو أرسل كلمة مرور بطول 8 أحرف على الأقل', 'bootstrap_password_required')

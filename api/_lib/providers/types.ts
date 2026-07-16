@@ -14,7 +14,12 @@ export interface ProviderConfig {
 export interface ProviderChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
+  attachments?: ProviderAttachment[]
 }
+
+export type ProviderAttachment =
+  | { type: 'image'; mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; dataUrl: string; name?: string; size?: number }
+  | { type: 'text'; mimeType: 'text/plain' | 'text/markdown' | 'application/json'; text: string; name?: string; size?: number }
 
 export interface ProviderUsage {
   inputTokens: number

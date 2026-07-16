@@ -25,6 +25,10 @@ export function publicProvider(provider: any) {
     diagnostic: provider.diagnostic ? redactUnknown(provider.diagnostic) : undefined,
     lastLatencyMs: provider.last_latency_ms ?? undefined,
     lastHttpStatus: provider.last_http_status ?? undefined,
+    isPlatformShared: provider.is_platform_shared === true,
+    isPlatformDefault: provider.is_platform_default === true,
+    platformDailyRequestLimit: provider.platform_daily_request_limit ?? undefined,
+    platformDailyTokenLimit: provider.platform_daily_token_limit ?? undefined,
     createdAt: provider.created_at,
     updatedAt: provider.updated_at,
   }
@@ -40,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const admin = getAdminClient()
 
     if (req.method === 'GET') {
-      const { data, error } = await admin.from('providers').select('id,name,type,protocol,base_url,model,is_enabled,last_tested_at,status,error_message,models,detected_protocol,diagnostic,last_latency_ms,last_http_status,created_at,updated_at').eq('user_id', user.id).order('created_at', { ascending: false })
+      const { data, error } = await admin.from('providers').select('id,name,type,protocol,base_url,model,is_enabled,last_tested_at,status,error_message,models,detected_protocol,diagnostic,last_latency_ms,last_http_status,is_platform_shared,is_platform_default,platform_daily_request_limit,platform_daily_token_limit,created_at,updated_at').eq('user_id', user.id).order('created_at', { ascending: false })
       if (error) throw new ApiError(500, 'تعذر تحميل المزودات', 'providers_read_failed')
       return res.status(200).json({ providers: (data || []).map(publicProvider) })
     }

@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { clearAuthCallbackFailure, readAuthCallbackFailure } from '../auth-callback-error'
 
 describe('OAuth callback failures', () => {
-  it('explains an invalid provider client secret returned in the URL hash', () => {
+  it('explains an invalid provider configuration without exposing infrastructure details', () => {
     const failure = readAuthCallbackFailure('', '#error=server_error&error_code=unexpected_failure&error_description=Unable+to+exchange+external+code%3A+oauth2%3A+%22invalid_client%22+%22The+provided+client+secret+is+invalid.%22')
-    expect(failure?.message).toContain('Client Secret')
+    expect(failure?.message).toContain('إعدادات مزود الحساب')
+    expect(failure?.message).not.toMatch(/client secret|oauth2|invalid_client/i)
     expect(failure?.description).toContain('invalid_client')
   })
 

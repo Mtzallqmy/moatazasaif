@@ -1,19 +1,21 @@
 import { getProviderRuntimeEnv } from '../env.js'
 import { extractModelIds, normalizeProviderError, parseSseStream, parseStreamJson, providerFetch, readProviderJson } from './http.js'
 import { emptyUsage, ProviderRequestError, type ProviderAdapter, type ProviderChatMessage, type ProviderConfig, type ProviderGenerateResult, type ProviderStreamEvent, type ProviderTestResult, usage } from './types.js'
+import { anthropicMessages, messageText } from './multimodal.js'
 
 function headers(config: ProviderConfig) {
   return { 'Content-Type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01' }
 }
 
 function requestBody(model: string, messages: ProviderChatMessage[], stream: boolean) {
-  const system = messages.find((message) => message.role === 'system')?.content
+  const systemMessage = messages.find((message) => message.role === 'system')
+  const system = systemMessage ? messageText(systemMessage) : undefined
   return {
     model,
     max_tokens: getProviderRuntimeEnv().PROVIDER_MAX_OUTPUT_TOKENS,
     stream,
     ...(system ? { system } : {}),
-    messages: messages.filter((message) => message.role !== 'system').map((message) => ({ role: message.role, content: message.content })),
+    messages: anthropicMessages(messages),
   }
 }
 

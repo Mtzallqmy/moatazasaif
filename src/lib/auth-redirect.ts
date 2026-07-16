@@ -1,4 +1,4 @@
-export const PRODUCTION_APP_URL = 'https://moatazasaif.vercel.app'
+export const PRODUCTION_APP_URL = 'https://moatazalalqami.online'
 
 function isLocalOrigin(value: string) {
   try {

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
 import { ApiError, methodNotAllowed, normalizeEmail, requireString, sendError, setJsonHeaders } from '../../_lib/http.js'
 import { getAdminClient, getProfile, getPublicAuthClient, publicUser } from '../../_lib/supabase.js'
-import { enforceRateLimit } from '../../_lib/rate-limit.js'
+import { enforceAuthRateLimit } from '../../_lib/rate-limit.js'
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -12,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const identifier = requireString(req.body?.identifier, 'identifier', 254).toLowerCase()
     const password = requireString(req.body?.password, 'password', 4096)
-    await enforceRateLimit(req, 'auth_login', 10, 900, identifier)
+    await enforceAuthRateLimit(req, 'auth_login', 10, 900, identifier)
     const admin = getAdminClient()
 
     let email = identifier

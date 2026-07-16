@@ -1,0 +1,19 @@
+{
+  "name": "Moataz AI",
+  "short_name": "Moataz AI",
+  "description": "A secure bilingual AI workspace for conversations, content, and integrations.",
+  "lang": "ar",
+  "dir": "auto",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070b17",
+  "theme_color": "#4f46e5",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Chat", "url": "/chat" },
+    { "name": "Articles", "url": "/blog" }
+  ]
+}

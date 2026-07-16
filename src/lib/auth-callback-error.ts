@@ -21,7 +21,7 @@ export function readAuthCallbackFailure(search: string, hash: string): AuthCallb
     return {
       code,
       description,
-      message: 'تعذر إكمال تسجيل الدخول لأن Client Secret في Supabase غير صحيح أو لا يطابق Client ID. حدّث بيانات OAuth من نفس التطبيق ثم أعد المحاولة.',
+      message: 'تعذر إكمال تسجيل الدخول بسبب إعدادات مزود الحساب. تواصل مع إدارة الموقع ثم أعد المحاولة.',
     }
   }
   if (/access_denied|cancel/i.test(`${code || ''} ${description}`)) {

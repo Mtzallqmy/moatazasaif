@@ -3,8 +3,27 @@ import { getServerEnv } from './_lib/env.js'
 import { getAdminClient } from './_lib/supabase.js'
 import { methodNotAllowed, setJsonHeaders } from './_lib/http.js'
 import { logTechnicalError } from './_lib/redaction.js'
+import platformProvider from './_handlers/platform-provider.js'
+import sitemap from './_handlers/sitemap.js'
+import announcements from './_handlers/v1/announcements.js'
+import articles from './_handlers/v1/articles.js'
+import contentSummary from './_handlers/v1/content-summary.js'
+import sections from './_handlers/v1/sections.js'
+import status from './_handlers/v1/status.js'
+
+const routedHandlers: Record<string, (req: VercelRequest, res: VercelResponse) => unknown> = {
+  'platform-provider': platformProvider,
+  sitemap,
+  'v1-announcements': announcements,
+  'v1-articles': articles,
+  'v1-content-summary': contentSummary,
+  'v1-sections': sections,
+  'v1-status': status,
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const route = Array.isArray(req.query.route) ? req.query.route[0] : req.query.route
+  if (route && routedHandlers[route]) return routedHandlers[route](req, res)
   setJsonHeaders(res)
   if (req.method !== 'GET') return methodNotAllowed(res, ['GET'])
   try {
@@ -21,9 +40,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ])
     if (profileError) throw profileError
     if (rateLimitError) throw rateLimitError
-    return res.status(200).json({ status: 'ready', database: 'connected', rateLimit: 'ready', timestamp: new Date().toISOString() })
+    return res.status(200).json({ status: 'ready', timestamp: new Date().toISOString() })
   } catch (error) {
     logTechnicalError('[readiness-failed]', error)
-    return res.status(503).json({ status: 'not_ready', database: 'unavailable', timestamp: new Date().toISOString() })
+    return res.status(503).json({ status: 'not_ready', timestamp: new Date().toISOString() })
   }
 }

@@ -1,43 +1,16 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import type React from 'react'
+import { PreferencesProvider, usePreferences } from './PreferencesContext'
 
-interface ThemeContextType {
-  theme: 'light' | 'dark'
-  toggleTheme: () => void
-  setTheme: (theme: 'light' | 'dark') => void
-}
-
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
-
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<'light' | 'dark'>('dark')
-
-  useEffect(() => {
-    const saved = localStorage.getItem('theme') as 'light' | 'dark' | null
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const initial = saved || (prefersDark ? 'dark' : 'dark') // Default to dark for professional AI feel
-    setThemeState(initial)
-    document.documentElement.classList.toggle('dark', initial === 'dark')
-  }, [])
-
-  const setTheme = (newTheme: 'light' | 'dark') => {
-    setThemeState(newTheme)
-    localStorage.setItem('theme', newTheme)
-    document.documentElement.classList.toggle('dark', newTheme === 'dark')
-  }
-
-  const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark')
-  }
-
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  )
-}
+// Kept as a compatibility layer for components that have not yet migrated to
+// the richer preferences API.
+export const ThemeProvider = ({ children }: { children: React.ReactNode }) => <PreferencesProvider>{children}</PreferencesProvider>
 
 export const useTheme = () => {
-  const context = useContext(ThemeContext)
-  if (!context) throw new Error('useTheme must be used within ThemeProvider')
-  return context
+  const { theme, effectiveTheme, setTheme } = usePreferences()
+  return {
+    theme,
+    effectiveTheme,
+    setTheme,
+    toggleTheme: () => setTheme(effectiveTheme === 'dark' ? 'light' : 'dark'),
+  }
 }

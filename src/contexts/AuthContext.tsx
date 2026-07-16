@@ -6,6 +6,7 @@ import { apiJson, authHeaders } from '../lib/api'
 import { getSupabaseBrowserConfig, supabase } from '../lib/supabase'
 import { getAuthRedirectUrl } from '../lib/auth-redirect'
 import { getOAuthProviderAvailability, type OAuthProvider } from '../lib/oauth-provider'
+import { usePreferences } from './PreferencesContext'
 
 export type { OAuthProvider } from '../lib/oauth-provider'
 
@@ -35,27 +36,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const navigate = useNavigate()
+  const { tr } = usePreferences()
 
   const refreshUser = useCallback(async () => {
     if (!supabase) { setUser(null); return }
     const { data, error } = await supabase.auth.getSession()
     if (error || !data.session) { setUser(null); return }
-    try {
-      const body = await apiJson<{ user: User }>('/api/auth/me', { headers: { Authorization: `Bearer ${data.session.access_token}` } })
-      setUser(body.user)
-    } catch {
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
-      setUser(null)
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const body = await apiJson<{ user: User }>('/api/auth/me', { headers: { Authorization: `Bearer ${data.session.access_token}` } })
+        setUser(body.user)
+        return
+      } catch (requestError) {
+        const status = (requestError as Error & { status?: number }).status
+        if (status === 401 || status === 403) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+          setUser(null)
+          return
+        }
+        if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)))
+      }
     }
   }, [])
 
   useEffect(() => {
     let mounted = true
     void refreshUser().finally(() => { if (mounted) setIsLoading(false) })
-    const subscription = supabase?.auth.onAuthStateChange((event, session) => {
+    const subscription = supabase?.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return
       if (!session) setUser(null)
-      else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') void refreshUser()
+      else window.setTimeout(() => { if (mounted) void refreshUser() }, 0)
     })
     return () => { mounted = false; subscription?.data.subscription.unsubscribe() }
   }, [refreshUser])
@@ -68,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const login = async (identifier: string, password: string) => {
-    if (!supabase) { toast.error('إعدادات Supabase العامة غير صالحة أو لا تطابق المشروع. راجع VITE_SUPABASE_URL ومفتاح النشر العام في Vercel.'); return false }
+    if (!supabase) { toast.error(tr('خدمة تسجيل الدخول غير متاحة مؤقتًا. حاول لاحقًا.', 'Sign-in is temporarily unavailable. Please try again later.')); return false }
     try {
       const body = await apiJson<{ session: ApiSession; user: User }>('/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier, password }),
@@ -84,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const requestMagicLink = async (email: string) => {
-    if (!supabase) { toast.error('إعدادات Supabase العامة غير صالحة أو لا تطابق المشروع. راجع VITE_SUPABASE_URL ومفتاح النشر العام في Vercel.'); return false }
+    if (!supabase) { toast.error(tr('خدمة تسجيل الدخول غير متاحة مؤقتًا. حاول لاحقًا.', 'Sign-in is temporarily unavailable. Please try again later.')); return false }
     try {
       const normalizedEmail = email.trim().toLowerCase()
       if (!normalizedEmail || !normalizedEmail.includes('@')) throw new Error('أدخل بريدًا إلكترونيًا صالحًا')
@@ -97,33 +107,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر إرسال رابط الدخول'
-      toast.error(/invalid api key/i.test(message)
-        ? 'مفتاح Supabase العام غير صحيح أو لا يطابق رابط المشروع. راجع VITE_SUPABASE_PUBLISHABLE_KEY أو NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY في Vercel.'
-        : message)
+      toast.error(/invalid api key/i.test(message) ? tr('تعذر الاتصال بخدمة تسجيل الدخول.', 'Could not connect to the sign-in service.') : message)
       return false
     }
   }
 
   const signInWithOAuth = async (provider: OAuthProvider) => {
     if (!supabase) {
-      toast.error('إعدادات Supabase العامة غير صالحة أو لا تطابق المشروع. راجع متغيرات VITE_SUPABASE في Vercel.')
+      toast.error(tr('خدمة تسجيل الدخول غير متاحة مؤقتًا.', 'Sign-in is temporarily unavailable.'))
       return false
     }
     try {
       const browserConfig = getSupabaseBrowserConfig()
-      if (!browserConfig) throw new Error('إعدادات Supabase العامة غير مكتملة')
+      if (!browserConfig) throw new Error(tr('خدمة تسجيل الدخول غير مهيأة', 'The sign-in service is not configured'))
 
       const availability = await getOAuthProviderAvailability(browserConfig, provider)
       if (availability === 'disabled') {
-        toast.error(`تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} غير مفعّل حاليًا. أكمِل إعداد المزوّد في Supabase ثم أعد المحاولة.`)
+        toast.error(tr(`تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} غير متاح حاليًا.`, `Sign-in with ${provider === 'google' ? 'Google' : 'GitHub'} is currently unavailable.`))
         return false
       }
       if (availability === 'unreachable') {
-        toast.error('تعذر وصول جهازك إلى نطاق Supabase. إذا ظهر DNS_PROBE_FINISHED_NXDOMAIN فعّل DNS الخاص dns.google في إعدادات الشبكة، ثم أعد فتح صفحة الدخول.')
+        toast.error(tr('تعذر الوصول إلى خدمة تسجيل الدخول. تحقق من الشبكة أو DNS ثم أعد المحاولة.', 'The sign-in service could not be reached. Check your network or DNS and try again.'))
         return false
       }
       if (availability === 'unknown') {
-        toast.error('تعذر التحقق من إعدادات تسجيل الدخول الآن. تحقق من اتصال Supabase ثم أعد المحاولة.')
+        toast.error(tr('تعذر التحقق من خدمة تسجيل الدخول الآن. أعد المحاولة.', 'The sign-in service could not be verified. Please try again.'))
         return false
       }
 
@@ -139,9 +147,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر بدء تسجيل الدخول عبر المزود'
       if (/provider.*(not enabled|disabled|unsupported)/i.test(message)) {
-        toast.error(`فعّل تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} من Supabase ثم أعد المحاولة`)
+        toast.error(tr(`تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} غير متاح حاليًا.`, `Sign-in with ${provider === 'google' ? 'Google' : 'GitHub'} is currently unavailable.`))
       } else if (/redirect|url.*not allowed/i.test(message)) {
-        toast.error('عنوان إعادة التوجيه غير مسموح. أضف https://moatazasaif.vercel.app/login إلى Redirect URLs في Supabase.')
+        toast.error(tr('تعذر إكمال تسجيل الدخول بسبب إعداد عنوان العودة. تواصل مع إدارة الموقع.', 'Sign-in could not complete because of a return URL configuration. Contact the site administrator.'))
       } else {
         toast.error(message)
       }
@@ -150,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const register = async (name: string, email: string, password: string, username?: string) => {
-    if (!supabase) { toast.error('إعدادات Supabase غير موجودة'); return false }
+    if (!supabase) { toast.error(tr('خدمة إنشاء الحساب غير متاحة مؤقتًا.', 'Account creation is temporarily unavailable.')); return false }
     try {
       const body = await apiJson<{ session: ApiSession | null; user: User; requiresEmailConfirmation?: boolean }>('/api/auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password, username }),
@@ -180,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) throw new Error('يجب تسجيل الدخول')
     try {
       const body = await apiJson<{ user: User }>('/api/auth/profile', {
-        method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ name: updates.name, avatar: updates.avatar }),
+        method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ name: updates.name, avatar: updates.avatar, preferences: updates.preferences }),
       })
       setUser(body.user)
       toast.success('تم تحديث الملف الشخصي')

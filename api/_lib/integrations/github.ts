@@ -48,7 +48,7 @@ async function githubRequest(path: string, token: string, fetcher: typeof fetch,
   if (!response.ok) {
     if (response.status === 401) throw new ApiError(401, 'GitHub token غير صالح أو منتهي', 'github_token_rejected')
     if (response.status === 403) throw new ApiError(403, 'GitHub رفض الطلب بسبب الصلاحيات أو حد الاستخدام', 'github_forbidden')
-    throw new ApiError(502, upstreamMessage(payload, 'فشل استدعاء GitHub'), 'github_api_failed', { status: response.status })
+    throw new ApiError(502, upstreamMessage(payload, 'فشل استدعاء GitHub', [token]), 'github_api_failed', { status: response.status })
   }
   return { payload, response }
 }

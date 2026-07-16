@@ -3,7 +3,7 @@ import type { User as AuthUser } from '@supabase/supabase-js'
 import { ApiError } from './http.js'
 import { getAdminClient, type AppRole, type ProfileRow } from './supabase.js'
 
-export const ALL_ROLES: AppRole[] = ['owner', 'admin', 'supervisor', 'user']
+export const ALL_ROLES: AppRole[] = ['owner', 'admin', 'manager', 'editor', 'user']
 
 export function normalizeUsername(value: string) {
   return value.trim().toLowerCase()

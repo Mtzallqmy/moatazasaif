@@ -20,7 +20,20 @@ export async function authHeaders(json = true) {
 }
 
 export async function apiJson<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, init)
+  const headers = new Headers(init.headers)
+  if (!headers.has('Accept-Language')) headers.set('Accept-Language', typeof document !== 'undefined' ? document.documentElement.lang || 'ar' : 'ar')
+  if (!headers.has('X-Request-ID')) headers.set('X-Request-ID', typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `web-${Date.now()}`)
+  const controller = init.signal ? undefined : new AbortController()
+  const timeout = controller ? window.setTimeout(() => controller.abort(), 30_000) : undefined
+  let response: Response
+  try {
+    response = await fetch(url, { ...init, headers, signal: init.signal || controller?.signal })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw new Error(document.documentElement.lang === 'en' ? 'The request timed out. Please try again.' : 'انتهت مهلة الطلب. أعد المحاولة.')
+    throw error
+  } finally {
+    if (timeout !== undefined) window.clearTimeout(timeout)
+  }
 
   const body = response.status === 204 ? null : await response.json().catch(() => null)
   

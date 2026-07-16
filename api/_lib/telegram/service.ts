@@ -10,10 +10,10 @@ import { recordAudit } from '../audit.js'
 import { deleteWebhook, getChat, getMe, getWebhookInfo, sendChatAction, sendMessage, setMyCommands, setWebhook } from './client.js'
 import { generateLinkCode, generateWebhookSecret, normalizeBotToken, sha256Hex } from './security.js'
 import { chatIdFromMessage, messageFromUpdate, publicChatFields, publicChatFieldsFromChat, providerMessagesFromTelegramRows, splitTelegramMessage, telegramCommand } from './messages.js'
-import type { TelegramBotUser, TelegramChatLinkRow, TelegramIntegrationRow, TelegramPublicChatLink, TelegramPublicIntegration, TelegramUpdate, TelegramWebhookInfo } from './types.js'
+import type { TelegramBotUser, TelegramChatLinkRow, TelegramIntegrationDiagnostic, TelegramIntegrationRow, TelegramPublicChatLink, TelegramPublicIntegration, TelegramUpdate, TelegramWebhookInfo } from './types.js'
 import { TelegramApiError } from './types.js'
 
-const INTEGRATION_COLUMNS = 'id,user_id,name,bot_id,bot_username,bot_first_name,encrypted_bot_token,webhook_secret_hash,provider_id,model,is_enabled,status,webhook_url,pending_update_count,last_error_message,last_webhook_checked_at,last_update_at,created_at,updated_at'
+const INTEGRATION_COLUMNS = 'id,user_id,name,bot_id,bot_username,bot_first_name,encrypted_bot_token,webhook_secret_hash,previous_webhook_secret_hash,previous_webhook_secret_expires_at,provider_id,model,is_enabled,status,webhook_url,pending_update_count,last_error_message,last_webhook_checked_at,last_update_at,created_at,updated_at'
 
 const BOT_COMMANDS = [
   { command: 'start', description: 'بدء الاستخدام وطريقة الربط' },
@@ -114,27 +114,47 @@ function webhookUpdateFields(info: TelegramWebhookInfo) {
 
 async function registerTelegramWebhook(integration: TelegramIntegrationRow, token: string) {
   const webhookUrl = getTelegramWebhookUrl()
-  // Telegram only accepts the plaintext secret during registration. The
-  // database stores a hash, so every re-registration must rotate the secret.
   const secret = generateWebhookSecret()
   const secretHash = sha256Hex(secret)
-  await setWebhook(token, {
-    url: webhookUrl,
-    secret_token: secret,
-    allowed_updates: ['message', 'callback_query'],
-    drop_pending_updates: false,
-  })
-  const { error: secretError } = await getAdminClient().from('telegram_integrations').update({
+  const previousHash = integration.webhook_secret_hash
+  const previousExpiresAt = new Date(Date.now() + 15 * 60_000).toISOString()
+  const admin = getAdminClient()
+
+  // Stage the new hash before asking Telegram to use it, while accepting the
+  // previous hash for a short grace period. This closes the failure window
+  // where Telegram had a new secret but the database only knew the old one.
+  const { error: secretError } = await admin.from('telegram_integrations').update({
     webhook_secret_hash: secretHash,
+    previous_webhook_secret_hash: previousHash,
+    previous_webhook_secret_expires_at: previousExpiresAt,
     webhook_url: webhookUrl,
     status: 'registering',
     updated_at: new Date().toISOString(),
   }).eq('id', integration.id).eq('user_id', integration.user_id)
   if (secretError) throw new ApiError(500, 'تعذر حفظ سر Webhook الجديد', 'telegram_webhook_secret_state_failed')
+
+  try {
+    await setWebhook(token, {
+      url: webhookUrl,
+      secret_token: secret,
+      allowed_updates: ['message', 'callback_query'],
+      drop_pending_updates: false,
+    })
+  } catch (error) {
+    await admin.from('telegram_integrations').update({
+      webhook_secret_hash: previousHash,
+      previous_webhook_secret_hash: integration.previous_webhook_secret_hash,
+      previous_webhook_secret_expires_at: integration.previous_webhook_secret_expires_at,
+      status: integration.status,
+      updated_at: new Date().toISOString(),
+    }).eq('id', integration.id).eq('user_id', integration.user_id)
+    throw error
+  }
+
   await setMyCommands(token, BOT_COMMANDS)
   const info = await getWebhookInfo(token)
   const now = new Date().toISOString()
-  const { data, error } = await getAdminClient().from('telegram_integrations').update({
+  const { data, error } = await admin.from('telegram_integrations').update({
     webhook_secret_hash: secretHash,
     webhook_url: webhookUrl,
     status: info.url === webhookUrl ? 'connected' : 'error',
@@ -191,7 +211,7 @@ export async function createTelegramIntegration(userId: string, input: { name: s
   }).select(INTEGRATION_COLUMNS).single()
   if (insertError || !inserted) {
     logTechnicalError('[telegram-integration-create-failed]', insertError, { userId, botId: String(bot.id), providerId: input.providerId })
-    throw new ApiError(insertError?.code === '23505' ? 409 : 500, insertError?.code === '23505' ? 'هذا البوت مرتبط مسبقًا بهذا الحساب' : 'تعذر حفظ تكامل Telegram', insertError?.code === '23505' ? 'telegram_bot_already_exists' : 'telegram_integration_create_failed')
+    throw new ApiError(insertError?.code === '23505' ? 409 : 500, insertError?.code === '23505' ? 'هذا البوت مرتبط مسبقًا بالمنصة؛ لكل بوت Webhook واحد فقط' : 'تعذر حفظ تكامل Telegram', insertError?.code === '23505' ? 'telegram_bot_already_exists' : 'telegram_integration_create_failed')
   }
 
   const integration = inserted as TelegramIntegrationRow
@@ -269,8 +289,9 @@ export async function checkTelegramWebhook(userId: string, integrationId: string
   }
 }
 
-export async function diagnoseTelegramIntegration(userId: string, integrationId: string) {
+export async function diagnoseTelegramIntegration(userId: string, integrationId: string): Promise<TelegramIntegrationDiagnostic> {
   const { integration, chats } = await getOwnedTelegramIntegration(userId, integrationId, true)
+  const admin = getAdminClient()
   const recommendations: string[] = []
   let tokenValid = false
   let bot: TelegramBotUser | undefined
@@ -300,20 +321,70 @@ export async function diagnoseTelegramIntegration(userId: string, integrationId:
   }
 
   const expectedUrl = (() => { try { return getTelegramWebhookUrl() } catch { return undefined } })()
-  if (!webhookInfo?.url) recommendations.push('سجّل Webhook على APP_URL عبر إجراء تسجيل Webhook.')
-  else if (expectedUrl && webhookInfo.url !== expectedUrl) recommendations.push('عنوان Webhook الحالي لا يطابق APP_URL المتوقع.')
-  if (chats.filter((chat) => chat.is_allowed).length === 0) recommendations.push('أنشئ كود ربط واربط محادثة Telegram قبل إرسال الرسائل.')
+  const webhookMatches = Boolean(webhookInfo?.url && expectedUrl && webhookInfo.url === expectedUrl)
+  const allowedChats = chats.filter((chat) => chat.is_allowed).length
+  if (!webhookInfo?.url) recommendations.push('سجّل Webhook من زر إصلاح الاتصال.')
+  else if (!webhookMatches) recommendations.push('أعد تسجيل Webhook ليطابق نقطة الاتصال الإنتاجية.')
+  if (allowedChats === 0) recommendations.push('أنشئ رابط ربط آمن وافتحه من حساب Telegram المطلوب.')
   if (!providerValid) recommendations.push('اختبر مزود الذكاء الاصطناعي والنموذج ثم أعد التشخيص.')
 
+  const since = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
+  const { data: recentRows, error: activityError } = await admin.from('telegram_updates')
+    .select('status,received_at,processed_at')
+    .eq('integration_id', integrationId)
+    .gte('received_at', since)
+    .order('received_at', { ascending: false })
+    .limit(500)
+  if (activityError) recommendations.push('تعذر قراءة سجل نشاط آخر 24 ساعة.')
+  const activity = (recentRows || []) as Array<{ status: string; received_at: string; processed_at: string | null }>
+  const failed24h = activity.filter((row) => row.status === 'failed').length
+  const processed24h = activity.filter((row) => row.status === 'processed').length
+  const pending = Math.max(0, Number(webhookInfo?.pending_update_count || 0))
+  const lastErrorAt = webhookInfo?.last_error_date ? new Date(webhookInfo.last_error_date * 1_000).toISOString() : undefined
+  const recentDeliveryError = Boolean(webhookInfo?.last_error_message && (!lastErrorAt || Date.now() - new Date(lastErrorAt).getTime() < 60 * 60_000))
+  const offline = !tokenValid || !webhookMatches
+  const degraded = !providerValid || allowedChats === 0 || failed24h > 0 || pending > 5 || recentDeliveryError
+  const overall: TelegramIntegrationDiagnostic['overall'] = offline ? 'offline' : degraded ? 'degraded' : 'healthy'
+
+  if (webhookInfo) {
+    await admin.from('telegram_integrations').update({
+      ...webhookUpdateFields(webhookInfo),
+      status: integration.is_enabled ? webhookMatches ? 'connected' : 'error' : 'disabled',
+      updated_at: new Date().toISOString(),
+    }).eq('id', integrationId).eq('user_id', userId)
+  }
+
+  const checks: TelegramIntegrationDiagnostic['checks'] = [
+    { key: 'token', ok: tokenValid, labelAr: 'هوية البوت', labelEn: 'Bot identity', detailAr: tokenValid ? 'Bot Token صالح وتم التحقق من الهوية.' : 'تعذر التحقق من Bot Token.', detailEn: tokenValid ? 'The token is valid and the bot identity was verified.' : 'The bot token could not be verified.' },
+    { key: 'webhook', ok: webhookMatches && !recentDeliveryError, labelAr: 'قناة Webhook', labelEn: 'Webhook channel', detailAr: webhookMatches ? recentDeliveryError ? 'العنوان صحيح لكن Telegram سجّل خطأ توصيل حديثًا.' : 'العنوان والسر يعملان على نقطة الإنتاج.' : 'العنوان غير مسجل أو لا يطابق نقطة الإنتاج.', detailEn: webhookMatches ? recentDeliveryError ? 'The URL matches, but Telegram reported a recent delivery error.' : 'The production endpoint and secret are active.' : 'The URL is missing or does not match production.' },
+    { key: 'provider', ok: providerValid, labelAr: 'مزود الذكاء الاصطناعي', labelEn: 'AI provider', detailAr: providerValid ? 'المزود والنموذج محفوظان ومختبران.' : 'المزود أو النموذج غير جاهز.', detailEn: providerValid ? 'The provider and model are saved and verified.' : 'The provider or model is not ready.' },
+    { key: 'chat', ok: allowedChats > 0, labelAr: 'المحادثات المصرح بها', labelEn: 'Authorized chats', detailAr: allowedChats > 0 ? `${allowedChats} محادثة مفعلة.` : 'لا توجد محادثة مفعلة.', detailEn: allowedChats > 0 ? `${allowedChats} chat(s) enabled.` : 'No chat has been enabled.' },
+  ]
+
   return {
+    overall,
     tokenValid,
     bot: bot ? { id: String(bot.id), username: bot.username, firstName: bot.first_name } : undefined,
-    webhookInfo: webhookInfo ? { url: webhookInfo.url, pendingUpdateCount: webhookInfo.pending_update_count, lastErrorMessage: webhookInfo.last_error_message ? redactText(webhookInfo.last_error_message) : undefined } : undefined,
+    webhook: {
+      configured: Boolean(webhookInfo?.url),
+      matchesExpected: webhookMatches,
+      pendingUpdateCount: pending,
+      lastErrorMessage: webhookInfo?.last_error_message ? redactText(webhookInfo.last_error_message) : undefined,
+      lastErrorAt,
+    },
     providerValid,
     model: integration.model,
     linkedChats: chats.length,
+    allowedChats,
     lastUpdateAt: integration.last_update_at || undefined,
-    lastError: integration.last_error_message ? redactText(integration.last_error_message) : undefined,
+    activity: {
+      received24h: activity.length,
+      processed24h,
+      failed24h,
+      lastReceivedAt: activity[0]?.received_at,
+      lastProcessedAt: activity.find((row) => row.processed_at)?.processed_at || undefined,
+    },
+    checks,
     recommendations,
   }
 }
@@ -357,18 +428,26 @@ export async function createTelegramLinkCode(userId: string, integrationId: stri
   const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString()
   const { error } = await admin.from('telegram_link_codes').insert({ integration_id: integrationId, code_hash: sha256Hex(code), expires_at: expiresAt })
   if (error) throw new ApiError(500, 'تعذر إنشاء كود الربط', 'telegram_link_code_failed')
-  return { code, command: `/connect ${code}`, expiresAt }
+  const startPayload = `connect_${code}`
+  const deepLink = integration.bot_username ? `https://t.me/${integration.bot_username}?start=${startPayload}` : undefined
+  return { code, command: `/connect ${code}`, startPayload, deepLink, expiresAt }
 }
 
-async function consumeLinkCode(integrationId: string, code: string, message: TelegramMessageLike) {
+type LinkResult = 'connected' | 'already_connected' | 'invalid'
+
+async function consumeLinkCode(integrationId: string, code: string, message: TelegramMessageLike): Promise<LinkResult> {
   const admin = getAdminClient()
-  const { data, error } = await admin.from('telegram_link_codes').update({ used_at: new Date().toISOString() }).eq('integration_id', integrationId).eq('code_hash', sha256Hex(code)).is('used_at', null).gt('expires_at', new Date().toISOString()).select('id').maybeSingle()
-  if (error || !data) return false
   const fields = publicChatFields(message)
+  const { data: existing } = await admin.from('telegram_chat_links').select('id,is_allowed').eq('integration_id', integrationId).eq('telegram_chat_id', fields.telegram_chat_id).maybeSingle()
+  if (existing?.is_allowed) return 'already_connected'
+  const normalizedCode = code.trim().toUpperCase()
+  if (!/^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(normalizedCode)) return 'invalid'
+  const { data, error } = await admin.from('telegram_link_codes').update({ used_at: new Date().toISOString() }).eq('integration_id', integrationId).eq('code_hash', sha256Hex(normalizedCode)).is('used_at', null).gt('expires_at', new Date().toISOString()).select('id').maybeSingle()
+  if (error || !data) return 'invalid'
   const { error: linkError } = await admin.from('telegram_chat_links').upsert({ integration_id: integrationId, ...fields, is_allowed: true, linked_at: new Date().toISOString() }, { onConflict: 'integration_id,telegram_chat_id' })
   if (linkError) throw new ApiError(500, 'تعذر ربط محادثة Telegram', 'telegram_chat_link_failed')
   await recordAudit(null, null, 'telegram.chat.linked', { integrationId, telegramChatId: fields.telegram_chat_id })
-  return true
+  return 'connected'
 }
 
 type TelegramMessageLike = Parameters<typeof publicChatFields>[0]
@@ -379,17 +458,31 @@ async function sendText(token: string, chatId: string, text: string, signal?: Ab
   for (const chunk of splitTelegramMessage(clipped)) await sendMessage(token, { chat_id: chatId, text: chunk }, signal)
 }
 
-function commandHelp() {
-  return ['/start — بدء الاستخدام', '/connect CODE — ربط هذه المحادثة بحسابك', '/help — عرض التعليمات', '/new — بدء سياق جديد', '/status — حالة المزود والنموذج'].join('\n')
+function commandHelp(isLinked: boolean) {
+  return [isLinked ? '✅ هذه المحادثة مرتبطة وجاهزة.' : 'هذه المحادثة غير مرتبطة بعد.', '/start — عرض حالة الربط', '/connect CODE — ربط هذه المحادثة بحسابك', '/help — عرض التعليمات', '/new — بدء سياق جديد', '/status — حالة المزود والنموذج'].join('\n')
 }
 
 async function sendCommand(token: string, integration: TelegramIntegrationRow, message: TelegramMessageLike, command: { command: string; args: string }, signal?: AbortSignal) {
   const chatId = String(message.chat.id)
-  if (command.command === 'start') return sendText(token, chatId, 'مرحبًا! اربط هذه المحادثة من داخل الموقع عبر كود /connect، ثم أرسل رسالتك.', signal)
-  if (command.command === 'help') return sendText(token, chatId, commandHelp(), signal)
+  const admin = getAdminClient()
+  const { data: chatLink } = await admin.from('telegram_chat_links').select('id,is_allowed').eq('integration_id', integration.id).eq('telegram_chat_id', chatId).maybeSingle()
+  const isLinked = Boolean(chatLink?.is_allowed)
+  if (command.command === 'start') {
+    const deepLinkCode = command.args.toLowerCase().startsWith('connect_') ? command.args.slice('connect_'.length) : ''
+    if (deepLinkCode) {
+      const result = await consumeLinkCode(integration.id, deepLinkCode, message)
+      return sendText(token, chatId, result === 'connected' ? '✅ تم ربط هذه المحادثة بنجاح. أرسل أي رسالة الآن لبدء الدردشة.' : result === 'already_connected' ? '✅ هذه المحادثة مرتبطة بالفعل وجاهزة. أرسل رسالتك الآن.' : 'انتهت صلاحية رابط الربط أو استُخدم مسبقًا. أنشئ رابطًا جديدًا من الموقع.', signal)
+    }
+    if (isLinked) return sendText(token, chatId, '✅ حسابك مرتبط بالفعل والبوت جاهز. أرسل أي رسالة، أو استخدم /status لفحص الحالة و/new لبدء سياق جديد.', signal)
+    if (chatLink) return sendText(token, chatId, 'هذه المحادثة مرتبطة لكنها معطلة من لوحة الموقع. فعّلها ثم أعد المحاولة.', signal)
+    return sendText(token, chatId, 'مرحبًا! هذه المحادثة غير مرتبطة بعد. افتح رابط الربط الآمن من صفحة التكاملات، أو أرسل /connect ثم كود الربط.', signal)
+  }
+  if (command.command === 'help') return sendText(token, chatId, commandHelp(isLinked), signal)
   if (command.command === 'connect') {
-    const connected = await consumeLinkCode(integration.id, command.args, message)
-    return sendText(token, chatId, connected ? 'تم ربط هذه المحادثة بنجاح. أرسل رسالتك الآن.' : 'كود الربط غير صحيح أو منتهي أو مستخدم مسبقًا.', signal)
+    if (isLinked) return sendText(token, chatId, '✅ هذه المحادثة مرتبطة بالفعل وجاهزة. لا تحتاج إلى كود جديد.', signal)
+    if (!command.args) return sendText(token, chatId, 'أرسل الأمر بهذا الشكل: /connect CODE\nأو افتح رابط الربط المباشر من صفحة التكاملات.', signal)
+    const result = await consumeLinkCode(integration.id, command.args, message)
+    return sendText(token, chatId, result === 'connected' ? '✅ تم ربط هذه المحادثة بنجاح. أرسل رسالتك الآن.' : result === 'already_connected' ? '✅ هذه المحادثة مرتبطة بالفعل.' : 'كود الربط غير صحيح أو منتهي أو مستخدم مسبقًا. أنشئ كودًا جديدًا من الموقع.', signal)
   }
   if (command.command === 'new') {
     const { data: link } = await getAdminClient().from('telegram_chat_links').select('id').eq('integration_id', integration.id).eq('telegram_chat_id', chatId).maybeSingle()
@@ -411,9 +504,19 @@ export async function saveReceivedTelegramUpdate(integrationId: string, update: 
 }
 
 export async function findIntegrationByWebhookSecret(secret: string) {
-  const { data, error } = await getAdminClient().from('telegram_integrations').select(INTEGRATION_COLUMNS).eq('webhook_secret_hash', sha256Hex(secret)).eq('is_enabled', true).maybeSingle()
+  const admin = getAdminClient()
+  const secretHash = sha256Hex(secret)
+  const { data, error } = await admin.from('telegram_integrations').select(INTEGRATION_COLUMNS).eq('webhook_secret_hash', secretHash).eq('is_enabled', true).maybeSingle()
   if (error) throw new ApiError(500, 'تعذر التحقق من تكامل Telegram', 'telegram_secret_lookup_failed')
-  return data as TelegramIntegrationRow | null
+  if (data) return data as TelegramIntegrationRow
+  const { data: previous, error: previousError } = await admin.from('telegram_integrations').select(INTEGRATION_COLUMNS)
+    .eq('previous_webhook_secret_hash', secretHash)
+    .eq('is_enabled', true)
+    .gt('previous_webhook_secret_expires_at', new Date().toISOString())
+    .limit(1)
+    .maybeSingle()
+  if (previousError) throw new ApiError(500, 'تعذر التحقق من تكامل Telegram', 'telegram_secret_lookup_failed')
+  return previous as TelegramIntegrationRow | null
 }
 
 export async function processTelegramUpdate(integrationId: string, updateId: number, update: TelegramUpdate) {

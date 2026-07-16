@@ -107,6 +107,8 @@ export interface TelegramIntegrationRow {
   bot_first_name: string | null
   encrypted_bot_token: { ciphertext: string; iv: string; authTag: string }
   webhook_secret_hash: string
+  previous_webhook_secret_hash: string | null
+  previous_webhook_secret_expires_at: string | null
   provider_id: string
   model: string
   is_enabled: boolean
@@ -167,4 +169,31 @@ export interface TelegramPublicIntegration {
   createdAt: string
   updatedAt: string
   chats: TelegramPublicChatLink[]
+}
+
+export interface TelegramIntegrationDiagnostic {
+  overall: 'healthy' | 'degraded' | 'offline'
+  tokenValid: boolean
+  bot?: { id: string; username?: string; firstName: string }
+  webhook: {
+    configured: boolean
+    matchesExpected: boolean
+    pendingUpdateCount: number
+    lastErrorMessage?: string
+    lastErrorAt?: string
+  }
+  providerValid: boolean
+  model: string
+  linkedChats: number
+  allowedChats: number
+  lastUpdateAt?: string
+  activity: {
+    received24h: number
+    processed24h: number
+    failed24h: number
+    lastReceivedAt?: string
+    lastProcessedAt?: string
+  }
+  checks: Array<{ key: string; ok: boolean; labelAr: string; labelEn: string; detailAr: string; detailEn: string }>
+  recommendations: string[]
 }

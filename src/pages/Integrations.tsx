@@ -1,18 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  Activity,
   Bot,
   CheckCircle,
   Clipboard,
+  ExternalLink,
+  HeartPulse,
   Link2,
   Loader2,
   Plug,
+  Radio,
   RefreshCw,
   Send,
   Shield,
+  ShieldCheck,
   Trash2,
   Unplug,
   XCircle,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,44 +27,15 @@ import { usePreferences } from "../contexts/PreferencesContext";
 import type { Provider } from "../types";
 import { apiJson, authHeaders } from "../lib/api";
 import ExternalIntegrations from "../components/integrations/ExternalIntegrations";
-
-type TelegramChat = {
-  id: string;
-  telegramChatId: string;
-  telegramUserId?: string;
-  chatType?: string;
-  username?: string;
-  firstName?: string;
-  lastName?: string;
-  title?: string;
-  isAllowed: boolean;
-  linkedAt: string;
-  lastMessageAt?: string;
-};
-
-type TelegramIntegration = {
-  id: string;
-  name: string;
-  botId: string;
-  botUsername?: string;
-  botFirstName?: string;
-  providerId: string;
-  model: string;
-  status: "registering" | "connected" | "error" | "disabled";
-  isEnabled: boolean;
-  webhookUrl?: string;
-  pendingUpdateCount?: number;
-  lastErrorMessage?: string;
-  lastWebhookCheckedAt?: string;
-  lastUpdateAt?: string;
-  chats: TelegramChat[];
-};
+import { DiagnosticPanel, LayerStatus } from "../components/integrations/TelegramDiagnostics";
+import type { TelegramChat, TelegramDiagnostic, TelegramIntegration } from "../features/integrations/telegram-types";
 
 export default function Integrations() {
   const { user } = useAuth();
   const { tr } = usePreferences();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [integrations, setIntegrations] = useState<TelegramIntegration[]>([]);
+  const [diagnostics, setDiagnostics] = useState<Record<string, TelegramDiagnostic>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -85,6 +62,7 @@ export default function Integrations() {
     integrationId: string;
     code: string;
     command: string;
+    deepLink?: string;
     expiresAt: string;
   } | null>(null);
 
@@ -249,6 +227,46 @@ export default function Integrations() {
     }
   };
 
+  const diagnose = async (integrationId: string, quiet = false) => {
+    setBusy(`diagnose:${integrationId}`);
+    try {
+      const result = await apiJson<TelegramDiagnostic>(
+        "/api/integrations/telegram/diagnose",
+        {
+          method: "POST",
+          headers: await authHeaders(),
+          body: JSON.stringify({ integrationId }),
+        },
+      );
+      setDiagnostics((current) => ({ ...current, [integrationId]: result }));
+      if (!quiet) {
+        toast[result.overall === "healthy" ? "success" : "warning"](
+          result.overall === "healthy"
+            ? tr(
+                "اكتمل الفحص: جميع طبقات الاتصال جاهزة",
+                "Diagnostic complete: every connection layer is ready",
+              )
+            : tr(
+                "اكتمل الفحص وظهرت نقاط تحتاج معالجة",
+                "Diagnostic complete with items that need attention",
+              ),
+        );
+      }
+      return result;
+    } catch (error) {
+      if (!quiet) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : tr("تعذر إكمال الفحص", "Could not complete diagnostics"),
+        );
+      }
+      return null;
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const action = async (
     integrationId: string,
     actionName: string,
@@ -300,6 +318,9 @@ export default function Integrations() {
             "Secret rotated and webhook re-registered",
           ),
         );
+      if (["check-webhook", "register-webhook", "test-message"].includes(actionName)) {
+        await diagnose(integrationId, true);
+      }
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -317,6 +338,7 @@ export default function Integrations() {
       const result = await apiJson<{
         code: string;
         command: string;
+        deepLink?: string;
         expiresAt: string;
       }>("/api/integrations/telegram/link-code", {
         method: "POST",
@@ -379,31 +401,52 @@ export default function Integrations() {
     : selectedProvider?.model
       ? [selectedProvider.model]
       : [];
+  const readyBots = integrations.filter(
+    (item) =>
+      item.status === "connected" && item.chats.some((chat) => chat.isAllowed),
+  ).length;
+  const linkedChats = integrations.reduce(
+    (total, item) => total + item.chats.filter((chat) => chat.isAllowed).length,
+    0,
+  );
+  const pendingUpdates = integrations.reduce(
+    (total, item) => total + (item.pendingUpdateCount || 0),
+    0,
+  );
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {tr("التكاملات", "Integrations")}
-        </h1>
-        <p className="text-dark-400 mt-1">
-          {tr(
-            "Telegram يعمل من الخادم حتى عند إغلاق المتصفح، ويستخدم نفس Runtime والمزود المحفوظ في دردشة الموقع. أدخل معرّف حسابك الاختياري للربط المباشر دون كود.",
-            "Telegram runs on the server even when the browser is closed, using the same runtime and saved provider as web chat. Add an optional chat ID for direct linking without a code.",
-          )}
-        </p>
-      </div>
-      <div className="card p-6 border-primary-500/30 bg-primary-500/5 mb-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <section className="integration-command-hero mb-8">
+        <div className="relative z-10 max-w-3xl">
+          <div className="integration-kicker">
+            <Radio size={15} /> {tr("مركز عمليات الاتصالات", "Connection operations center")}
+          </div>
+          <h1>{tr("قنواتك الذكية، مرئية وقابلة للإصلاح", "Your AI channels, observable and repairable")}</h1>
+          <p>
+            {tr(
+              "فحص حي من هوية البوت إلى Webhook والمزود والمحادثة، مع ربط مباشر آمن وإصلاح بنقرة واحدة دون كشف أي سر للمتصفح.",
+              "Live checks from bot identity through webhook, provider, and chat, with secure one-tap linking and repair without exposing secrets to the browser.",
+            )}
+          </p>
+        </div>
+        <div className="integration-hero-orb" aria-hidden="true"><Zap /></div>
+        <div className="integration-metrics relative z-10">
+          <div><span><Bot size={16} /></span><strong>{readyBots}</strong><small>{tr("بوت جاهز", "Ready bots")}</small></div>
+          <div><span><Send size={16} /></span><strong>{linkedChats}</strong><small>{tr("محادثة مفعلة", "Enabled chats")}</small></div>
+          <div><span><Activity size={16} /></span><strong>{pendingUpdates}</strong><small>{tr("تحديثات معلقة", "Pending updates")}</small></div>
+          <div><span><ShieldCheck size={16} /></span><strong>{integrations.length ? "256" : "—"}</strong><small>{tr("تشفير الخادم", "Server encryption")}</small></div>
+        </div>
+      </section>
+
+      <div className="card p-5 sm:p-6 border-primary-500/20 mb-8">
         <div className="flex gap-3">
-          <Shield className="text-primary-400 shrink-0" />
+          <Shield className="text-primary-500 shrink-0" />
           <div>
-            <h2 className="font-semibold">
-              {tr("أمان التكامل", "Integration security")}
-            </h2>
-            <p className="text-sm text-dark-400 mt-1 leading-7">
+            <h2 className="font-semibold">{tr("حدود أمان واضحة", "Clear security boundaries")}</h2>
+            <p className="text-sm text-dark-500 mt-1 leading-7">
               {tr(
-                "يُختبر التوكن مباشرة مع Telegram ثم يُحفظ مشفّرًا. لا يعاد Bot Token أو Webhook Secret إلى المتصفح ولا يُخزّن في بياناته المحلية.",
-                "The token is verified directly with Telegram and stored encrypted. Bot tokens and webhook secrets are never returned to the browser or kept in its local data.",
+                "تُختبر بيانات الاعتماد من الخادم وتُشفّر قبل التخزين. تظهر هنا النتائج التشغيلية فقط، بينما تبقى التوكينات وأسرار Webhook خارج الواجهة وسجل المتصفح.",
+                "Credentials are verified server-side and encrypted before storage. Only operational results appear here; tokens and webhook secrets stay out of the UI and browser storage.",
               )}
             </p>
           </div>
@@ -651,10 +694,12 @@ export default function Integrations() {
               key={integration.id}
               integration={integration}
               busy={busy}
+              diagnostic={diagnostics[integration.id]}
               linkCode={
                 linkCode?.integrationId === integration.id ? linkCode : null
               }
               onAction={action}
+              onDiagnose={diagnose}
               onGenerateCode={generateCode}
               onDelete={deleteIntegration}
             />
@@ -673,34 +718,42 @@ export default function Integrations() {
 function TelegramCard({
   integration,
   busy,
+  diagnostic,
   linkCode,
   onAction,
+  onDiagnose,
   onGenerateCode,
   onDelete,
 }: {
   integration: TelegramIntegration;
   busy: string | null;
-  linkCode: { code: string; command: string; expiresAt: string } | null;
+  diagnostic?: TelegramDiagnostic;
+  linkCode: { code: string; command: string; deepLink?: string; expiresAt: string } | null;
   onAction: (
     id: string,
     action: string,
     extra?: Record<string, unknown>,
   ) => void;
+  onDiagnose: (id: string) => Promise<TelegramDiagnostic | null>;
   onGenerateCode: (id: string) => void;
   onDelete: (integration: TelegramIntegration) => void;
 }) {
   const { tr } = usePreferences();
+  const hasAllowedChat = integration.chats.some((chat) => chat.isAllowed);
+  const operational = integration.status === "connected" && hasAllowedChat;
   const statusClass =
-    integration.status === "connected"
-      ? "text-emerald-400 border-emerald-700"
+    operational
+      ? "text-emerald-500 border-emerald-500/40 bg-emerald-500/10"
       : integration.status === "error"
-        ? "text-red-400 border-red-700"
-        : "text-amber-400 border-amber-700";
+        ? "text-red-500 border-red-500/40 bg-red-500/10"
+        : "text-amber-500 border-amber-500/40 bg-amber-500/10";
   const statusLabel =
     integration.status === "registering"
       ? tr("جارٍ التسجيل", "Registering")
-      : integration.status === "connected"
-        ? tr("متصل", "Connected")
+      : operational
+        ? tr("جاهز للعمل", "Operational")
+        : integration.status === "connected"
+          ? tr("ينتظر ربط محادثة", "Awaiting chat link")
         : integration.status === "error"
           ? tr("فشل", "Failed")
           : tr("معطل", "Disabled");
@@ -713,7 +766,7 @@ function TelegramCard({
               <Bot className="text-sky-400" />
               <h2 className="text-xl font-semibold">{integration.name}</h2>
               <span className={`provider-badge ${statusClass}`} role="status">
-                {integration.status === "connected" ? (
+                {operational ? (
                   <CheckCircle size={12} className="inline ml-1" />
                 ) : integration.status === "error" ? (
                   <XCircle size={12} className="inline ml-1" />
@@ -727,7 +780,7 @@ function TelegramCard({
               ID <span dir="ltr">{integration.botId}</span>
             </p>
           </div>
-          <div className="text-left text-xs text-dark-500">
+          <div className="text-start text-xs text-dark-500 rounded-2xl border border-dark-200 dark:border-dark-700 px-4 py-3 min-w-44">
             <div>
               {tr("النموذج:", "Model:")}{" "}
               <span className="text-dark-300" dir="ltr">
@@ -740,23 +793,41 @@ function TelegramCard({
             </div>
           </div>
         </div>
-        <div className="grid md:grid-cols-2 gap-3 mt-5 text-xs">
-          <div className="bg-dark-900 rounded-xl p-3">
-            <div className="text-dark-500 mb-1">Webhook URL</div>
-            <div dir="ltr" className="truncate text-dark-300">
-              {integration.webhookUrl || tr("غير مسجل", "Not registered")}
-            </div>
-          </div>
-          <div className="bg-dark-900 rounded-xl p-3">
-            <div className="text-dark-500 mb-1">
-              {tr("آخر خطأ", "Last error")}
-            </div>
-            <div className="text-red-300">
-              {integration.lastErrorMessage || tr("لا يوجد", "None")}
-            </div>
-          </div>
+        <div className="integration-layer-grid mt-5">
+          <LayerStatus
+            icon={Bot}
+            ok={integration.status === "connected"}
+            label="Webhook"
+            detail={integration.status === "connected" ? tr("مسجل وآمن", "Registered securely") : tr("يحتاج معالجة", "Needs attention")}
+          />
+          <LayerStatus
+            icon={Send}
+            ok={hasAllowedChat}
+            label={tr("المحادثة", "Chat")}
+            detail={hasAllowedChat ? tr("مصرح بها", "Authorized") : tr("غير مربوطة", "Not linked")}
+          />
+          <LayerStatus
+            icon={Activity}
+            ok={(integration.pendingUpdateCount || 0) < 6}
+            label={tr("طابور التحديث", "Update queue")}
+            detail={tr(`${integration.pendingUpdateCount || 0} معلّق`, `${integration.pendingUpdateCount || 0} pending`)}
+          />
+          <LayerStatus
+            icon={ShieldCheck}
+            ok={!integration.lastErrorMessage}
+            label={tr("آخر توصيل", "Last delivery")}
+            detail={integration.lastErrorMessage || tr("لا توجد أخطاء", "No errors")}
+          />
         </div>
         <div className="flex flex-wrap gap-2 mt-5">
+          <button
+            className="btn btn-primary text-xs"
+            disabled={busy === `diagnose:${integration.id}`}
+            onClick={() => void onDiagnose(integration.id)}
+          >
+            <HeartPulse size={14} className={busy === `diagnose:${integration.id}` ? "animate-pulse" : ""} />
+            {tr("فحص شامل", "Full diagnostic")}
+          </button>
           <button
             className="btn btn-secondary text-xs"
             disabled={busy === `check-webhook:${integration.id}`}
@@ -775,14 +846,14 @@ function TelegramCard({
             disabled={busy === `register-webhook:${integration.id}`}
             onClick={() => onAction(integration.id, "register-webhook")}
           >
-            <Link2 size={14} /> {tr("إعادة التسجيل", "Re-register")}
+            <Link2 size={14} /> {tr("إصلاح الاتصال", "Repair connection")}
           </button>
           <button
             className="btn btn-secondary text-xs"
             disabled={busy === `code:${integration.id}`}
             onClick={() => onGenerateCode(integration.id)}
           >
-            <Clipboard size={14} /> {tr("توليد كود ربط", "Generate link code")}
+            <Clipboard size={14} /> {tr("إنشاء رابط ربط", "Create link")}
           </button>
           <button
             className="btn btn-ghost text-red-400 text-xs"
@@ -796,14 +867,24 @@ function TelegramCard({
           <div className="mt-4 p-4 rounded-xl bg-primary-500/10 border border-primary-500/30">
             <div className="text-sm font-medium mb-2">
               {tr(
-                "أرسل إلى البوت خلال 10 دقائق:",
-                "Send this to the bot within 10 minutes:",
+                "رابط آمن لمرة واحدة — صالح لعشر دقائق",
+                "Secure one-time link — valid for ten minutes",
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {linkCode.deepLink && (
+                <a
+                  className="btn btn-primary text-xs"
+                  href={linkCode.deepLink}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink size={14} /> {tr("فتح Telegram والربط", "Open Telegram and link")}
+                </a>
+              )}
               <code
                 dir="ltr"
-                className="text-lg tracking-widest text-primary-200"
+                className="text-sm tracking-wider text-primary-700 dark:text-primary-200 rounded-lg bg-white/60 dark:bg-dark-950/60 px-3 py-2"
               >
                 {linkCode.command}
               </code>
@@ -819,12 +900,13 @@ function TelegramCard({
             </div>
             <div className="text-xs text-dark-500 mt-2">
               {tr(
-                "لا يظهر الكود مرة أخرى بعد انتهاء هذه الجلسة.",
-                "The code will not be shown again after this session ends.",
+                `ينتهي ${new Intl.DateTimeFormat("ar", { hour: "2-digit", minute: "2-digit" }).format(new Date(linkCode.expiresAt))}. إن لم يفتح الرابط انسخ الأمر اليدوي أعلاه.`,
+                `Expires at ${new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit" }).format(new Date(linkCode.expiresAt))}. If the link does not open, copy the manual command above.`,
               )}
             </div>
           </div>
         )}
+        {diagnostic && <DiagnosticPanel diagnostic={diagnostic} />}
       </div>
       <div className="border-t border-dark-700">
         <div className="px-5 py-3 text-sm font-medium">

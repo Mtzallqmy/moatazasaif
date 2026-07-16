@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Bot, BookOpen, FileText, MessageCircle, Plus, Plug, Settings, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, BookOpen, FileText, MessageCircle, Plus, Plug, Settings, ShieldCheck, Sparkles, Palette, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePreferences } from '../contexts/PreferencesContext'
 import type { Chat, Provider } from '../types'
@@ -52,7 +52,9 @@ export default function Dashboard() {
     { to: '/providers', icon: Bot, label: t('dashboard.addProvider'), desc: tr('اربط مفتاحًا واختبره فعليًا', 'Connect and test an API key') },
     ...(canManageIntegrations ? [{ to: '/integrations', icon: Plug, label: t('dashboard.manageIntegrations'), desc: tr('Telegram وGitHub وWhatsApp وMCP', 'Telegram, GitHub, WhatsApp, and MCP') }] : []),
     ...(canManageContent ? [{ to: '/admin/content', icon: FileText, label: tr('إدارة المحتوى', 'Manage content'), desc: tr('مقالات وأقسام وإعلانات', 'Articles, sections, and announcements') }] : []),
-  ], [canManageContent, canManageIntegrations, t, tr])
+    ...(['owner', 'admin'].includes(user?.role || '') ? [{ to: '/admin/site', icon: Palette, label: tr('استوديو الموقع', 'Site studio'), desc: tr('الهوية والألوان والخطوط والتنقل', 'Identity, colors, typography, and navigation') }] : []),
+    ...(user?.role === 'owner' ? [{ to: '/admin/users', icon: Users, label: tr('الفريق والصلاحيات', 'Team and roles'), desc: tr('إدارة المستخدمين والأدوار بأمان', 'Securely manage users and roles') }] : []),
+  ], [canManageContent, canManageIntegrations, t, tr, user?.role])
 
   const cards = [
     { label: t('dashboard.chats'), value: stats.chats, hint: t('dashboard.chatsHint'), icon: MessageCircle, color: 'text-primary-500 bg-primary-500/10' },
@@ -62,7 +64,7 @@ export default function Dashboard() {
   ]
 
   return <div><AnnouncementBar placement="dashboard" /><div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8"><div><div className="inline-flex items-center gap-2 text-sm text-primary-600 dark:text-primary-400 mb-2"><Sparkles size={15} />{tr('مساحة عملك', 'Your workspace')}</div><h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">{t('dashboard.welcome')}، {user?.name?.split(' ')[0]}</h1><p className="text-dark-500 mt-2">{t('dashboard.subtitle')}</p></div><div className="flex gap-2"><Link to="/settings" className="btn btn-secondary"><Settings size={16} />{t('nav.settings')}</Link><Link to="/chat" className="btn btn-primary"><Plus size={16} />{t('nav.newChat')}</Link></div></div>
+    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8"><div><div className="inline-flex items-center gap-2 text-sm text-primary-600 dark:text-primary-400 mb-2"><Sparkles size={15} />{tr('مركز الإدارة', 'Administration center')}</div><h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">{t('dashboard.welcome')}، {user?.name?.split(' ')[0]}</h1><p className="text-dark-500 mt-2">{tr('ملخص تشغيلي وأدوات تحرير فعلية لإدارة المنصة من مكان واحد.', 'An operational overview and real editing tools to manage the platform in one place.')}</p></div><div className="flex gap-2"><Link to="/settings" className="btn btn-secondary"><Settings size={16} />{t('nav.settings')}</Link><Link to="/chat" className="btn btn-primary"><Plus size={16} />{t('nav.newChat')}</Link></div></div>
 
     <div className={`grid sm:grid-cols-2 ${cards.length === 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-3'} gap-4 mb-7`}>{cards.map((card) => { const Icon = card.icon; return <div key={card.label} className="card p-5"><div className="flex items-start justify-between gap-3"><div><div className="text-sm text-dark-500">{card.label}</div><div className="text-4xl font-semibold tracking-tight mt-2">{loading ? '—' : card.value}</div></div><div className={`w-11 h-11 rounded-2xl grid place-items-center ${card.color}`}><Icon size={20} /></div></div><div className="text-xs text-dark-500 mt-5">{card.hint}</div></div> })}</div>
 

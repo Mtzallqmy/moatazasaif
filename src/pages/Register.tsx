@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import OAuthButtons from '../components/OAuthButtons'
 import PublicPreferencesButton from '../components/PublicPreferencesButton'
 import { usePreferences } from '../contexts/PreferencesContext'
+import { useSiteSettings } from '../contexts/SiteSettingsContext'
 
 export default function Register() {
   const [name, setName] = useState('')
@@ -16,7 +17,10 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false)
   const { register } = useAuth()
   const { t, tr } = usePreferences()
+  const { settings: siteSettings } = useSiteSettings()
   const navigate = useNavigate()
+
+  if (!siteSettings.allowRegistration) return <div className="app-canvas min-h-screen grid place-items-center p-6"><div className="card p-8 max-w-md text-center"><h1 className="text-2xl font-semibold">{tr('التسجيل الجديد متوقف مؤقتًا', 'New registration is temporarily paused')}</h1><p className="text-dark-500 mt-3">{tr('يمكن للحسابات الحالية متابعة تسجيل الدخول بصورة طبيعية.', 'Existing accounts can continue to sign in normally.')}</p><Link to="/login" className="btn btn-primary mt-6">{t('auth.login')}</Link></div></div>
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()

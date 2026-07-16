@@ -1,11 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
 import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from '../../_lib/http.js'
 import { authenticateApiKey, assertModelAllowed, requestId, requireScope, writeApiUsage } from '../../_lib/public-api.js'
 import { enforceRateLimit } from '../../_lib/rate-limit.js'
 import { getAdminClient } from '../../_lib/supabase.js'
-import { generateProviderText, inferProtocol, providerBaseUrl, type ProviderRecord } from '../../_lib/provider-runtime.js'
-import { assertSafeProviderUrl } from '../../_lib/provider-runtime.js'
+import { assertSafeProviderUrl, generateProviderText, inferProtocol, providerBaseUrl, type ProviderRecord } from '../../_lib/provider-runtime.js'
 import { decryptSecret } from '../../_lib/crypto.js'
 
 const requestSchema = z.object({
@@ -23,7 +23,7 @@ const requestSchema = z.object({
 }).strict()
 
 function completionId() {
-  return `chatcmpl_${crypto.randomUUID().replace(/-/g, '')}`
+  return `chatcmpl_${randomUUID().replace(/-/g, '')}`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -11,6 +11,8 @@
     { "source": "/api/v1/articles", "destination": "/api/ready?route=v1-articles" },
     { "source": "/api/v1/announcements", "destination": "/api/ready?route=v1-announcements" },
     { "source": "/api/v1/content/summary", "destination": "/api/ready?route=v1-content-summary" },
+    { "source": "/api/v1/site", "destination": "/api/ready?route=site-settings&scope=public" },
+    { "source": "/api/site-settings", "destination": "/api/ready?route=site-settings&scope=admin" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],

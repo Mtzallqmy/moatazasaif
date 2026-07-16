@@ -1,9 +1,9 @@
-import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
-import { getAdminClient, requireRoles } from '../_lib/supabase.js'
-import { ApiError, methodNotAllowed, optionalString, requireString, sendError, setJsonHeaders } from '../_lib/http.js'
-import { CONTENT_ROLES, contentWriteError, optionalBoolean, optionalInteger, queryString, requireId, requireSlug } from '../_lib/content.js'
-import { enforceRateLimit } from '../_lib/rate-limit.js'
-import { writeAuditEvent } from '../_lib/audit.js'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { getAdminClient, requireRoles } from '../../_lib/supabase.js'
+import { ApiError, methodNotAllowed, optionalString, requireString, sendError, setJsonHeaders } from '../../_lib/http.js'
+import { CONTENT_ROLES, contentWriteError, optionalBoolean, optionalInteger, queryString, requireId, requireSlug } from '../../_lib/content.js'
+import { enforceRateLimit } from '../../_lib/rate-limit.js'
+import { writeAuditEvent } from '../../_lib/audit.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)

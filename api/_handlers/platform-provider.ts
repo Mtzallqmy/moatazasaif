@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from './_lib/vercel.js'
-import { authenticate, getAdminClient } from './_lib/supabase.js'
-import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from './_lib/http.js'
-import { enforceRateLimit } from './_lib/rate-limit.js'
-import { parseRequest, providerPlatformConfigSchema } from './_lib/provider-schemas.js'
-import { configurePlatformProvider, getPlatformProviderSummary } from './_lib/platform-provider.js'
-import { recordAudit } from './_lib/audit.js'
+import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
+import { authenticate, getAdminClient } from '../_lib/supabase.js'
+import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from '../_lib/http.js'
+import { enforceRateLimit } from '../_lib/rate-limit.js'
+import { parseRequest, providerPlatformConfigSchema } from '../_lib/provider-schemas.js'
+import { configurePlatformProvider, getPlatformProviderSummary } from '../_lib/platform-provider.js'
+import { recordAudit } from '../_lib/audit.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)

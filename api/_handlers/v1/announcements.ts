@@ -1,9 +1,9 @@
-import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
-import { getAdminClient, requireRoles } from '../_lib/supabase.js'
-import { ApiError, methodNotAllowed, optionalString, requireString, sendError, setJsonHeaders } from '../_lib/http.js'
-import { CONTENT_ROLES, contentWriteError, optionalBoolean, optionalInteger, optionalIsoDate, optionalSafeUrl, queryString, requireId } from '../_lib/content.js'
-import { enforceRateLimit } from '../_lib/rate-limit.js'
-import { writeAuditEvent } from '../_lib/audit.js'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { getAdminClient, requireRoles } from '../../_lib/supabase.js'
+import { ApiError, methodNotAllowed, optionalString, requireString, sendError, setJsonHeaders } from '../../_lib/http.js'
+import { CONTENT_ROLES, contentWriteError, optionalBoolean, optionalInteger, optionalIsoDate, optionalSafeUrl, queryString, requireId } from '../../_lib/content.js'
+import { enforceRateLimit } from '../../_lib/rate-limit.js'
+import { writeAuditEvent } from '../../_lib/audit.js'
 
 function placement(value: unknown) {
   if (value !== 'top' && value !== 'dashboard') throw new ApiError(400, 'موضع الإعلان غير صالح', 'invalid_placement')

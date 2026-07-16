@@ -4,7 +4,13 @@
   "buildCommand": "vite build",
   "framework": "vite",
   "rewrites": [
-    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/sitemap.xml", "destination": "/api/ready?route=sitemap" },
+    { "source": "/api/platform-provider", "destination": "/api/ready?route=platform-provider" },
+    { "source": "/api/v1/status", "destination": "/api/ready?route=v1-status" },
+    { "source": "/api/v1/sections", "destination": "/api/ready?route=v1-sections" },
+    { "source": "/api/v1/articles", "destination": "/api/ready?route=v1-articles" },
+    { "source": "/api/v1/announcements", "destination": "/api/ready?route=v1-announcements" },
+    { "source": "/api/v1/content/summary", "destination": "/api/ready?route=v1-content-summary" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],

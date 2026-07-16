@@ -3,7 +3,7 @@ import { getAdminClient } from '../../_lib/supabase.js'
 import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from '../../_lib/http.js'
 import { enforceRateLimit } from '../../_lib/rate-limit.js'
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function contentSummaryHandler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)
   res.setHeader('X-API-Version', '1')
   if (req.method !== 'GET') return methodNotAllowed(res, ['GET'])

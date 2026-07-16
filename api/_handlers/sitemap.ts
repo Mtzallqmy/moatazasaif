@@ -1,6 +1,6 @@
-import type { VercelRequest, VercelResponse } from './_lib/vercel.js'
-import { getAdminClient } from './_lib/supabase.js'
-import { methodNotAllowed } from './_lib/http.js'
+import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
+import { getAdminClient } from '../_lib/supabase.js'
+import { methodNotAllowed } from '../_lib/http.js'
 
 const ORIGIN = 'https://moatazalalqami.online'
 const escapeXml = (value: string) => value.replace(/[<>&'\"]/g, (character) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[character]!)

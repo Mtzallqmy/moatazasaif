@@ -1,9 +1,9 @@
-import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
-import { getAdminClient, requireRoles } from '../_lib/supabase.js'
-import { ApiError, methodNotAllowed, optionalString, requireString, sendError, setJsonHeaders } from '../_lib/http.js'
-import { ARTICLE_STATUSES, CONTENT_ROLES, contentWriteError, optionalIsoDate, optionalSafeUrl, pageParams, queryString, requireId, requireSlug } from '../_lib/content.js'
-import { enforceRateLimit } from '../_lib/rate-limit.js'
-import { writeAuditEvent } from '../_lib/audit.js'
+import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
+import { getAdminClient, requireRoles } from '../../_lib/supabase.js'
+import { ApiError, methodNotAllowed, optionalString, requireString, sendError, setJsonHeaders } from '../../_lib/http.js'
+import { ARTICLE_STATUSES, CONTENT_ROLES, contentWriteError, optionalIsoDate, optionalSafeUrl, pageParams, queryString, requireId, requireSlug } from '../../_lib/content.js'
+import { enforceRateLimit } from '../../_lib/rate-limit.js'
+import { writeAuditEvent } from '../../_lib/audit.js'
 
 function articleStatus(value: unknown) {
   if (typeof value !== 'string' || !ARTICLE_STATUSES.includes(value as (typeof ARTICLE_STATUSES)[number])) throw new ApiError(400, 'حالة المقال غير صالحة', 'invalid_article_status')

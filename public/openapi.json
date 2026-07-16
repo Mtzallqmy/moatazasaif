@@ -1,0 +1,38 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Moataz AI API",
+    "version": "1.0.0",
+    "description": "Public content, authentication, AI chat, integration, and administration contracts for web and future mobile clients."
+  },
+  "servers": [{ "url": "https://moatazalalqami.online", "description": "Production" }],
+  "components": {
+    "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" } }
+  },
+  "paths": {
+    "/api/v1/status": { "get": { "summary": "API status", "responses": { "200": { "description": "Healthy" } } } },
+    "/api/v1/sections": { "get": { "summary": "List visible sections", "responses": { "200": { "description": "Sections" } } } },
+    "/api/v1/articles": { "get": { "summary": "List or retrieve published articles", "parameters": [{ "name": "slug", "in": "query", "schema": { "type": "string" } }, { "name": "section", "in": "query", "schema": { "type": "string" } }, { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1 } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50 } }], "responses": { "200": { "description": "Articles and pagination" } } } },
+    "/api/v1/announcements": { "get": { "summary": "List active announcements", "parameters": [{ "name": "placement", "in": "query", "schema": { "type": "string", "enum": ["top", "dashboard"] } }], "responses": { "200": { "description": "Announcements" } } } },
+    "/api/v1/content/summary": { "get": { "summary": "Published content totals", "responses": { "200": { "description": "Content totals" } } } },
+    "/api/auth/register": { "post": { "summary": "Create a regular account", "responses": { "201": { "description": "Account created" } } } },
+    "/api/auth/login": { "post": { "summary": "Password sign-in", "responses": { "200": { "description": "Session and profile" } } } },
+    "/api/auth/me": { "get": { "summary": "Read the current profile", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Current user" } } } },
+    "/api/auth/profile": { "patch": { "summary": "Update profile and preferences", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Updated user" } } } },
+    "/api/providers": {
+      "get": { "summary": "List owned providers", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Providers" } } },
+      "post": { "summary": "Save an encrypted provider credential", "security": [{ "bearerAuth": [] }], "responses": { "201": { "description": "Provider created" } } },
+      "patch": { "summary": "Update an owned provider", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Provider updated" } } },
+      "delete": { "summary": "Delete an owned provider", "security": [{ "bearerAuth": [] }], "responses": { "204": { "description": "Provider deleted" } } }
+    },
+    "/api/providers/test": { "post": { "summary": "Test a saved or session-only provider", "responses": { "200": { "description": "Connection diagnostic" }, "422": { "description": "Provider rejected the request" } } } },
+    "/api/chat": { "post": { "summary": "Generate an AI response using session, saved, or platform credentials", "responses": { "200": { "description": "JSON result or SSE stream" }, "429": { "description": "Rate or daily quota exceeded" } } } },
+    "/api/platform-provider": {
+      "get": { "summary": "Read platform provider availability and personal quota usage", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Availability and usage" } } },
+      "patch": { "summary": "Owner configures the shared provider and daily limits", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Configuration updated" }, "403": { "description": "Owner role required" } } }
+    },
+    "/api/integrations/telegram": { "get": { "summary": "Read Telegram integration", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Integration state" } } }, "post": { "summary": "Create Telegram integration", "security": [{ "bearerAuth": [] }], "responses": { "201": { "description": "Integration created" } } }, "patch": { "summary": "Update Telegram integration", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Integration updated" } } }, "delete": { "summary": "Delete Telegram integration", "security": [{ "bearerAuth": [] }], "responses": { "204": { "description": "Integration deleted" } } } },
+    "/api/integrations/external": { "get": { "summary": "Read GitHub and WhatsApp integrations", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Integration states" } } }, "post": { "summary": "Create an external integration", "security": [{ "bearerAuth": [] }], "responses": { "201": { "description": "Integration created" } } }, "patch": { "summary": "Update an external integration", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Integration updated" } } }, "delete": { "summary": "Delete an external integration", "security": [{ "bearerAuth": [] }], "responses": { "204": { "description": "Integration deleted" } } } },
+    "/api/admin/users": { "get": { "summary": "Owner lists managed users", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Managed users" }, "403": { "description": "Owner role required" } } }, "post": { "summary": "Owner creates a managed user", "security": [{ "bearerAuth": [] }], "responses": { "201": { "description": "Managed user created" } } }, "patch": { "summary": "Owner updates role, status, or credentials", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Managed user updated" } } }, "delete": { "summary": "Owner deletes a managed user", "security": [{ "bearerAuth": [] }], "responses": { "204": { "description": "Managed user deleted" } } } }
+  }
+}

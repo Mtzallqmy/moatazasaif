@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getServerEnv, getTelegramWebhookUrl, resetEnvCacheForTests } from '../env.js'
+import { getProviderRuntimeEnv, getServerEnv, getTelegramWebhookUrl, resetEnvCacheForTests } from '../env.js'
 
 const snapshot = { ...process.env }
 
@@ -49,5 +49,14 @@ describe('server environment', () => {
     })
     resetEnvCacheForTests()
     expect(getTelegramWebhookUrl()).toBe('https://moatazasaif.vercel.app/api/integrations/telegram/webhook')
+  })
+
+  it('keeps provider timeouts below the Vercel function deadline', () => {
+    Object.assign(process.env, {
+      NODE_ENV: 'production',
+      PROVIDER_TIMEOUT_MS: '56000',
+    })
+    resetEnvCacheForTests()
+    expect(() => getProviderRuntimeEnv()).toThrow('PROVIDER_TIMEOUT_MS')
   })
 })

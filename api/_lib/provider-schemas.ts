@@ -8,7 +8,7 @@ const trimmed = (max: number) => z.string().trim().min(1).max(max)
 const optionalTrimmed = (max: number) => z.preprocess(emptyToUndefined, z.string().trim().min(1).max(max).optional())
 const optionalUrl = z.preprocess(emptyToUndefined, z.string().trim().url().max(1_000).optional())
 
-export const credentialModeSchema = z.enum(['session', 'saved'])
+export const credentialModeSchema = z.enum(['session', 'saved', 'platform'])
 export type CredentialMode = SharedCredentialMode
 
 export const providerProtocolSchema = z.enum(PROVIDER_PROTOCOLS)
@@ -37,6 +37,10 @@ const sessionSelectionFields = {
   provider: ephemeralProviderSchema,
 }
 
+const platformSelectionFields = {
+  credentialMode: z.literal('platform'),
+}
+
 export const providerSelectionSchema = z.discriminatedUnion('credentialMode', [
   z.object(savedSelectionFields).strict(),
   z.object(sessionSelectionFields).strict(),
@@ -63,12 +67,86 @@ export const providerPatchSchema = z.object({
   isEnabled: z.boolean().optional(),
 }).strict()
 
+export const providerPlatformConfigSchema = z.object({
+  providerId: z.string().uuid(),
+  isShared: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
+  dailyRequestLimit: z.number().int().min(1).max(100_000).optional(),
+  dailyTokenLimit: z.number().int().min(1_000).max(1_000_000_000).optional(),
+}).strict().refine((value) => Object.keys(value).some((key) => key !== 'providerId'), {
+  message: 'يجب إرسال إعداد منصة واحد على الأقل',
+})
+
 export const providerDeleteSchema = z.object({ id: z.string().uuid() }).strict()
+
+const attachmentName = z.string().trim().min(1).max(200).optional()
+const attachmentSize = z.number().int().min(0).max(3 * 1024 * 1024).optional()
+const imageMimeType = z.enum(['image/png', 'image/jpeg', 'image/webp'])
+const textMimeType = z.enum(['text/plain', 'text/markdown', 'application/json'])
+const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024
+
+function decodedImage(value: string) {
+  const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(value)
+  if (!match || match[2].length % 4 !== 0) return undefined
+  return { mimeType: match[1], bytes: Buffer.from(match[2], 'base64') }
+}
+
+function roughlyMatchesSize(declared: number | undefined, actual: number) {
+  if (declared === undefined) return true
+  return Math.abs(declared - actual) <= Math.max(32, Math.ceil(actual * 0.01))
+}
+
+export const chatAttachmentSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('image'),
+    mimeType: imageMimeType,
+    dataUrl: z.string().max(Math.ceil(MAX_ATTACHMENT_BYTES * 4 / 3) + 100),
+    name: attachmentName,
+    size: attachmentSize,
+  }).strict().superRefine((attachment, context) => {
+    const decoded = decodedImage(attachment.dataUrl)
+    if (!decoded || decoded.mimeType !== attachment.mimeType) {
+      context.addIssue({ code: 'custom', path: ['dataUrl'], message: 'بيانات الصورة أو MIME غير صالحة' })
+      return
+    }
+    if (decoded.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+      context.addIssue({ code: 'custom', path: ['dataUrl'], message: 'حجم الصورة أكبر من الحد المسموح' })
+    }
+    const validMagic = attachment.mimeType === 'image/png'
+      ? decoded.bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+      : attachment.mimeType === 'image/jpeg'
+        ? decoded.bytes[0] === 0xff && decoded.bytes[1] === 0xd8 && decoded.bytes[2] === 0xff
+        : decoded.bytes.subarray(0, 4).toString('ascii') === 'RIFF' && decoded.bytes.subarray(8, 12).toString('ascii') === 'WEBP'
+    if (!validMagic) context.addIssue({ code: 'custom', path: ['dataUrl'], message: 'توقيع ملف الصورة لا يطابق MIME' })
+    if (!roughlyMatchesSize(attachment.size, decoded.bytes.byteLength)) {
+      context.addIssue({ code: 'custom', path: ['size'], message: 'الحجم المصرح لا يطابق حمولة الصورة' })
+    }
+  }),
+  z.object({
+    type: z.literal('text'),
+    mimeType: textMimeType,
+    text: z.string().min(1).max(MAX_ATTACHMENT_BYTES),
+    name: attachmentName,
+    size: attachmentSize,
+  }).strict().superRefine((attachment, context) => {
+    const actual = Buffer.byteLength(attachment.text, 'utf8')
+    if (actual > MAX_ATTACHMENT_BYTES) context.addIssue({ code: 'custom', path: ['text'], message: 'حجم الملف النصي أكبر من الحد المسموح' })
+    if (!roughlyMatchesSize(attachment.size, actual)) context.addIssue({ code: 'custom', path: ['size'], message: 'الحجم المصرح لا يطابق النص' })
+    if (attachment.mimeType === 'application/json') {
+      try { JSON.parse(attachment.text) } catch { context.addIssue({ code: 'custom', path: ['text'], message: 'مرفق JSON غير صالح' }) }
+    }
+  }),
+])
 
 export const chatMessageSchema = z.object({
   role: z.enum(['system', 'user', 'assistant']),
-  content: trimmed(100_000),
-}).strict()
+  content: z.string().trim().max(100_000),
+  attachments: z.array(chatAttachmentSchema).max(3).optional(),
+}).strict().superRefine((message, context) => {
+  if (!message.content && !message.attachments?.length) {
+    context.addIssue({ code: 'custom', path: ['content'], message: 'الرسالة أو المرفق مطلوب' })
+  }
+})
 
 const chatFields = {
   model: optionalTrimmed(300),
@@ -79,9 +157,24 @@ const chatFields = {
 export const chatRequestSchema = z.discriminatedUnion('credentialMode', [
   z.object({ ...savedSelectionFields, ...chatFields }).strict(),
   z.object({ ...sessionSelectionFields, ...chatFields }).strict(),
+  z.object({ ...platformSelectionFields, messages: chatFields.messages, stream: chatFields.stream }).strict(),
 ]).superRefine((body, context) => {
   const total = body.messages.reduce((sum, message) => sum + message.content.length, 0)
   if (total > 500_000) context.addIssue({ code: 'custom', path: ['messages'], message: 'سياق المحادثة أكبر من الحد المسموح' })
+  let attachmentBytes = 0
+  body.messages.forEach((message, index) => {
+    if (!message.attachments?.length) return
+    if (index !== body.messages.length - 1 || message.role !== 'user') {
+      context.addIssue({ code: 'custom', path: ['messages', index, 'attachments'], message: 'المرفقات مسموحة في آخر رسالة مستخدم فقط' })
+    }
+    for (const attachment of message.attachments) {
+      if (attachment.type === 'text') attachmentBytes += Buffer.byteLength(attachment.text, 'utf8')
+      else attachmentBytes += decodedImage(attachment.dataUrl)?.bytes.byteLength || MAX_ATTACHMENT_BYTES + 1
+    }
+  })
+  if (attachmentBytes > MAX_ATTACHMENT_BYTES) {
+    context.addIssue({ code: 'custom', path: ['messages'], message: 'إجمالي المرفقات أكبر من 3MB' })
+  }
 })
 
 export type ProviderSelection = z.infer<typeof providerSelectionSchema>

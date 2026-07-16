@@ -3,6 +3,7 @@ import { getServerEnv } from '../../_lib/env.js'
 import { ApiError, methodNotAllowed, normalizeEmail, optionalString, requireString, sendError, setJsonHeaders } from '../../_lib/http.js'
 import { getAdminClient, getPublicAuthClient, publicUser } from '../../_lib/supabase.js'
 import { enforceRateLimit } from '../../_lib/rate-limit.js'
+import { isOwnerEmail } from '../../_lib/access.js'
 
 const usernamePattern = /^[a-z0-9][a-z0-9._-]{2,31}$/i
 
@@ -46,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       id: data.user.id,
       username: username || null,
       display_name: name,
-      role: 'user',
+      role: isOwnerEmail(email) ? 'owner' : 'user',
       is_active: true,
       must_change_password: false,
       is_internal_email: false,

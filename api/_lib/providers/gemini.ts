@@ -1,6 +1,7 @@
 import { getProviderRuntimeEnv } from '../env.js'
 import { extractModelIds, normalizeProviderError, parseSseStream, parseStreamJson, providerFetch, readProviderJson } from './http.js'
 import { emptyUsage, ProviderRequestError, type ProviderAdapter, type ProviderChatMessage, type ProviderConfig, type ProviderGenerateResult, type ProviderStreamEvent, type ProviderTestResult, usage } from './types.js'
+import { geminiParts, messageText } from './multimodal.js'
 
 function headers(config: ProviderConfig) {
   return { 'Content-Type': 'application/json', 'x-goog-api-key': config.apiKey }
@@ -9,10 +10,11 @@ function headers(config: ProviderConfig) {
 function normalizedModel(model: string) { return model.replace(/^models\//, '') }
 
 function requestBody(messages: ProviderChatMessage[]) {
-  const system = messages.find((message) => message.role === 'system')?.content
+  const systemMessage = messages.find((message) => message.role === 'system')
+  const system = systemMessage ? messageText(systemMessage) : undefined
   const contents = messages.filter((message) => message.role !== 'system').map((message) => ({
     role: message.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: message.content }],
+    parts: geminiParts(message),
   }))
   return {
     ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),

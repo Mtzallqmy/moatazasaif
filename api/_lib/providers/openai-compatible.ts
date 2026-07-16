@@ -1,6 +1,7 @@
 import { getProviderRuntimeEnv } from '../env.js'
 import { extractModelIds, normalizeProviderError, parseSseStream, parseStreamJson, providerFetch, readProviderJson } from './http.js'
 import { emptyUsage, ProviderRequestError, type ProviderAdapter, type ProviderChatMessage, type ProviderConfig, type ProviderGenerateResult, type ProviderStreamEvent, type ProviderTestResult, usage } from './types.js'
+import { hasImageAttachments, messageText, openAiMessages } from './multimodal.js'
 
 function headers(config: ProviderConfig) {
   const result: Record<string, string> = {
@@ -16,7 +17,7 @@ function headers(config: ProviderConfig) {
 }
 
 function chatBody(model: string, messages: ProviderChatMessage[], stream: boolean) {
-  return { model, messages, stream, temperature: 0.7, max_tokens: getProviderRuntimeEnv().PROVIDER_MAX_OUTPUT_TOKENS }
+  return { model, messages: openAiMessages(messages), stream, temperature: 0.7, max_tokens: getProviderRuntimeEnv().PROVIDER_MAX_OUTPUT_TOKENS }
 }
 
 export const openAiCompatibleAdapter: ProviderAdapter = {
@@ -68,8 +69,15 @@ export const openAiCompatibleAdapter: ProviderAdapter = {
       if (!(error instanceof ProviderRequestError) || ![404, 405].includes(error.details.status || 0)) throw error
     }
 
+    if (hasImageAttachments(messages)) {
+      throw new ProviderRequestError({
+        message: 'بوابة Chat Completions لهذا المزود لم تقبل الطلب، ولا يمكن إسقاط الصور عند الرجوع إلى Responses API.',
+        code: 'provider_image_fallback_unsupported',
+        endpoint: chatEndpoint,
+      })
+    }
     const endpoint = `${config.baseUrl}/responses`
-    const input = messages.map((message) => `${message.role.toUpperCase()}: ${message.content}`).join('\n\n')
+    const input = messages.map((message) => `${message.role.toUpperCase()}: ${messageText(message)}`).join('\n\n')
     const response = await providerFetch(endpoint, { method: 'POST', headers: headers(config), body: JSON.stringify({ model, input, max_output_tokens: getProviderRuntimeEnv().PROVIDER_MAX_OUTPUT_TOKENS }) }, signal)
     const payload = await readProviderJson(response, endpoint)
     const content = payload?.output_text || payload?.output?.flatMap?.((item: any) => item?.content || []).map((item: any) => item?.text || '').join('') || ''

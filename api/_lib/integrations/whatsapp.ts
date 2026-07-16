@@ -39,7 +39,7 @@ async function graphRequest(path: string, accessToken: string, init: RequestInit
   const payload = await readIntegrationJson(response)
   if (!response.ok) {
     if (response.status === 401) throw new ApiError(401, 'WhatsApp access token غير صالح أو منتهي', 'whatsapp_token_rejected')
-    throw new ApiError(response.status === 400 ? 400 : 502, upstreamMessage(payload, 'فشل استدعاء WhatsApp Cloud API'), 'whatsapp_api_failed', { status: response.status })
+    throw new ApiError(response.status === 400 ? 400 : 502, upstreamMessage(payload, 'فشل استدعاء WhatsApp Cloud API', [accessToken]), 'whatsapp_api_failed', { status: response.status })
   }
   return payload
 }

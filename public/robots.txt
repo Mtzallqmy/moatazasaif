@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /providers
+Disallow: /integrations
+Disallow: /chat
+
+Sitemap: https://moatazalalqami.online/sitemap.xml

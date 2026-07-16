@@ -21,9 +21,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ])
     if (profileError) throw profileError
     if (rateLimitError) throw rateLimitError
-    return res.status(200).json({ status: 'ready', database: 'connected', rateLimit: 'ready', timestamp: new Date().toISOString() })
+    return res.status(200).json({ status: 'ready', timestamp: new Date().toISOString() })
   } catch (error) {
     logTechnicalError('[readiness-failed]', error)
-    return res.status(503).json({ status: 'not_ready', database: 'unavailable', timestamp: new Date().toISOString() })
+    return res.status(503).json({ status: 'not_ready', timestamp: new Date().toISOString() })
   }
 }

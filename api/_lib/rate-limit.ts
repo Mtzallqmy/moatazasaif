@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto'
+import { createHmac, randomBytes } from 'node:crypto'
 import type { VercelRequest } from './vercel.js'
 import { ApiError } from './http.js'
 import { getAdminClient } from './supabase.js'
@@ -7,7 +7,7 @@ import { logTechnicalError } from './redaction.js'
 function clientIp(req: VercelRequest) {
   const forwarded = req.headers['x-forwarded-for']
   const value = Array.isArray(forwarded) ? forwarded[0] : forwarded
-  return value?.split(',')[0]?.trim() || String(req.headers['x-real-ip'] || 'unknown')
+  return (value?.split(',')[0]?.trim() || String(req.headers['x-real-ip'] || 'unknown')).slice(0, 200)
 }
 
 interface MemoryBucket { count: number; resetAt: number }
@@ -33,6 +33,20 @@ export function sessionRateLimitFingerprints(action: string, ip: string, fingerp
   return [
     createHmac('sha256', salt).update([action, ip].join('\u001f')).digest('hex'),
     createHmac('sha256', salt).update([action, ip, ...fingerprintParts].join('\u001f')).digest('hex'),
+  ]
+}
+
+function rateLimitFingerprint(parts: string[]) {
+  // Persist only a keyed digest. A plain SHA-256 of a predictable email/IP
+  // could be brute-forced from the server-only rate-limit table.
+  const salt = process.env.ENCRYPTION_KEY || sessionFingerprintSalt
+  return createHmac('sha256', salt).update(parts.join('\u001f')).digest('hex')
+}
+
+export function authRateLimitFingerprints(action: string, ip: string, subject: string) {
+  return [
+    rateLimitFingerprint([action, 'ip', ip]),
+    rateLimitFingerprint([action, 'subject', subject.trim().toLowerCase()]),
   ]
 }
 
@@ -114,32 +128,36 @@ export async function enforceRateLimit(
   windowSeconds: number,
   subject?: string,
 ) {
-  const source = `${action}:${clientIp(req)}:${subject || 'anonymous'}`
-  const keyHash = createHash('sha256').update(source).digest('hex')
-  const { data, error } = await getAdminClient().rpc('consume_api_rate_limit', {
-    p_key_hash: keyHash,
-    p_action: action,
-    p_limit: limit,
-    p_window_seconds: windowSeconds,
-  }).single()
+  const keyHash = rateLimitFingerprint([action, clientIp(req), subject || 'anonymous'])
+  return consumeRateLimit(action, limit, windowSeconds, keyHash, '[rate-limit-failed]')
+}
 
-  if (error || !data) {
-    logTechnicalError('[rate-limit-failed]', error, { action })
-    throw new ApiError(503, 'خدمة الحماية من كثرة الطلبات غير جاهزة', 'rate_limit_unavailable')
+/**
+ * Authentication limiter with independent IP and account buckets. This stops
+ * both username rotation from one source and distributed guessing of one
+ * account while retaining only keyed, irreversible identifiers.
+ */
+export async function enforceAuthRateLimit(
+  req: VercelRequest,
+  action: string,
+  limit: number,
+  windowSeconds: number,
+  subject: string,
+) {
+  let strictest: { allowed: boolean; remaining: number; reset_at: string } | undefined
+  for (const keyHash of authRateLimitFingerprints(action, clientIp(req), subject)) {
+    const result = await consumeRateLimit(action, limit, windowSeconds, keyHash, '[auth-rate-limit-failed]')
+    if (!strictest || result.remaining < strictest.remaining) strictest = result
   }
-
-  const result = data as { allowed: boolean; remaining: number; reset_at: string }
-  if (!result.allowed) {
-    throw new ApiError(429, 'طلبات كثيرة جدًا. حاول مجددًا لاحقًا.', 'rate_limited', {
-      resetAt: result.reset_at,
-      remaining: result.remaining,
-    })
-  }
-  return result
+  return strictest!
 }
 
 export async function enforceRateLimitKey(action: string, limit: number, windowSeconds: number, parts: string[]) {
-  const keyHash = createHash('sha256').update([action, ...parts].join('\u001f')).digest('hex')
+  const keyHash = rateLimitFingerprint([action, ...parts])
+  return consumeRateLimit(action, limit, windowSeconds, keyHash, '[rate-limit-key-failed]')
+}
+
+async function consumeRateLimit(action: string, limit: number, windowSeconds: number, keyHash: string, logScope: string) {
   const { data, error } = await getAdminClient().rpc('consume_api_rate_limit', {
     p_key_hash: keyHash,
     p_action: action,
@@ -147,7 +165,7 @@ export async function enforceRateLimitKey(action: string, limit: number, windowS
     p_window_seconds: windowSeconds,
   }).single()
   if (error || !data) {
-    logTechnicalError('[rate-limit-key-failed]', error, { action })
+    logTechnicalError(logScope, error, { action })
     throw new ApiError(503, 'خدمة الحماية من كثرة الطلبات غير جاهزة', 'rate_limit_unavailable')
   }
   const result = data as { allowed: boolean; remaining: number; reset_at: string }

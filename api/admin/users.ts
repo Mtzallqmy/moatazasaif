@@ -5,6 +5,7 @@ import { getAdminClient, getProfile, requireRoles, type AppRole, type ProfileRow
 import { ALL_ROLES, adminUserView, generateTemporaryPassword, listAllAuthUsers, normalizeUsername, validateUsername } from '../_lib/users.js'
 import { enforceRateLimit } from '../_lib/rate-limit.js'
 import { logTechnicalError } from '../_lib/redaction.js'
+import { isOwnerEmail } from '../_lib/access.js'
 
 async function countActiveOwners() {
   const { count, error } = await getAdminClient()
@@ -43,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const actor = await requireRoles(req, ['owner', 'admin'])
+    const actor = await requireRoles(req, ['owner'])
     await enforceRateLimit(req, req.method === 'GET' ? 'admin_users_read' : 'admin_users_write', req.method === 'GET' ? 120 : 60, req.method === 'GET' ? 60 : 300, actor.user.id)
     const admin = getAdminClient()
 
@@ -66,6 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ensureAssignableRole(actor.profile.role, requestedRole)
 
       const providedEmail = optionalString(req.body?.email, 254)
+      if (requestedRole === 'owner' && !isOwnerEmail(providedEmail)) {
+        throw new ApiError(403, 'دور المالك مقصور على حسابات الملكية المعتمدة', 'owner_email_restricted')
+      }
       const isInternalEmail = !providedEmail
       const email = providedEmail
         ? normalizeEmail(providedEmail)
@@ -142,6 +146,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (requestedRole) {
       ensureAssignableRole(actor.profile.role, requestedRole)
+      if (requestedRole === 'owner') {
+        const { data: targetAuth, error: targetAuthError } = await admin.auth.admin.getUserById(targetId)
+        if (targetAuthError || !isOwnerEmail(targetAuth.user?.email)) throw new ApiError(403, 'دور المالك مقصور على حسابات الملكية المعتمدة', 'owner_email_restricted')
+      }
       if (targetProfile.role === 'owner' && requestedRole !== 'owner' && await countActiveOwners() <= 1) {
         throw new ApiError(409, 'لا يمكن تخفيض صلاحيات آخر مالك نشط', 'last_owner_protected')
       }
@@ -178,7 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { data: updated, error } = await admin.from('profiles').update(patch).eq('id', targetId).select('*').single()
-    if (error) throw new ApiError(500, 'تعذر تحديث المستخدم', 'user_update_failed')
+    if (error) throw new ApiError(error.code === '42501' ? 403 : 500, error.code === '42501' ? 'دور المالك مقصور على حسابات الملكية المعتمدة' : 'تعذر تحديث المستخدم', error.code === '42501' ? 'owner_email_restricted' : 'user_update_failed')
 
     const { data: authData, error: authReadError } = await admin.auth.admin.getUserById(targetId)
     if (authReadError || !authData.user) throw new ApiError(404, 'مستخدم المصادقة غير موجود', 'auth_user_missing')

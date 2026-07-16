@@ -49,4 +49,23 @@ describe('Telegram provider processing', () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith('telegram-secret', { chat_id: '55', text: 'real answer' }, expect.any(AbortSignal))
     expect(mocks.recordAudit).toHaveBeenCalledWith('user-1', 'user-1', 'telegram.message.processed', expect.any(Object))
   })
+
+  it('reports an already-linked chat as ready on /start', async () => {
+    await processTelegramUpdate('integration-1', 11, { update_id: 11, message: { message_id: 4, from: { id: 77, is_bot: false }, chat: { id: 55, type: 'private' }, text: '/start' } })
+    expect(mocks.generateProviderText).not.toHaveBeenCalled()
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
+      'telegram-secret',
+      expect.objectContaining({ chat_id: '55', text: expect.stringContaining('مرتبط بالفعل') }),
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('does not ask an already-linked chat for another /connect code', async () => {
+    await processTelegramUpdate('integration-1', 12, { update_id: 12, message: { message_id: 5, from: { id: 77, is_bot: false }, chat: { id: 55, type: 'private' }, text: '/connect' } })
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
+      'telegram-secret',
+      expect.objectContaining({ chat_id: '55', text: expect.stringContaining('لا تحتاج إلى كود جديد') }),
+      expect.any(AbortSignal),
+    )
+  })
 })

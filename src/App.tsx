@@ -11,6 +11,7 @@ import AnnouncementBar from './components/AnnouncementBar'
 import type { AppRole } from './types'
 import { Toaster } from 'sonner'
 import { CONTENT_ROLES, INTEGRATION_ROLES, MANAGEMENT_ROLES } from './lib/access'
+import { SiteSettingsProvider } from './contexts/SiteSettingsContext'
 
 const Landing = lazy(() => import('./pages/Landing'))
 const Login = lazy(() => import('./pages/Login'))
@@ -27,6 +28,7 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 const Blog = lazy(() => import('./pages/Blog'))
 const BlogArticle = lazy(() => import('./pages/BlogArticle'))
 const ContentManager = lazy(() => import('./pages/ContentManager'))
+const AdminSiteSettings = lazy(() => import('./pages/AdminSiteSettings'))
 
 function PageFallback() {
   const { t } = usePreferences()
@@ -82,7 +84,7 @@ function LocalizedToaster() {
 const protectedPage = (page: React.ReactNode) => <ProtectedRoute><AppLayout>{page}</AppLayout></ProtectedRoute>
 
 export default function App() {
-  return <ThemeProvider><AuthProvider><AccountPreferencesSync /><AppErrorBoundary><Suspense fallback={<PageFallback />}><Routes>
+  return <ThemeProvider><SiteSettingsProvider><AuthProvider><AccountPreferencesSync /><AppErrorBoundary><Suspense fallback={<PageFallback />}><Routes>
     <Route path="/" element={<Landing />} />
     <Route path="/login" element={<Login />} />
     <Route path="/register" element={<Register />} />
@@ -98,6 +100,7 @@ export default function App() {
     <Route path="/settings" element={protectedPage(<Settings />)} />
     <Route path="/admin/users" element={protectedPage(<RoleRoute roles={['owner']}><AdminUsers /></RoleRoute>)} />
     <Route path="/admin/content" element={protectedPage(<RoleRoute roles={CONTENT_ROLES}><ContentManager /></RoleRoute>)} />
+    <Route path="/admin/site" element={protectedPage(<RoleRoute roles={['owner', 'admin']}><AdminSiteSettings /></RoleRoute>)} />
     <Route path="*" element={<NotFound />} />
-  </Routes></Suspense></AppErrorBoundary><LocalizedToaster /></AuthProvider></ThemeProvider>
+  </Routes></Suspense></AppErrorBoundary><LocalizedToaster /></AuthProvider></SiteSettingsProvider></ThemeProvider>
 }

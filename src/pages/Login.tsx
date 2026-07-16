@@ -8,6 +8,7 @@ import { clearAuthCallbackFailure, readAuthCallbackFailure } from '../lib/auth-c
 import { usePreferences } from '../contexts/PreferencesContext'
 import PublicPreferencesButton from '../components/PublicPreferencesButton'
 import { homeForUser } from '../lib/access'
+import { useSiteSettings } from '../contexts/SiteSettingsContext'
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('')
@@ -18,6 +19,7 @@ export default function Login() {
   
   const { user, login, requestMagicLink } = useAuth()
   const { t, tr } = usePreferences()
+  const { settings: siteSettings } = useSiteSettings()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as any)?.from?.pathname as string | undefined
@@ -119,14 +121,14 @@ export default function Login() {
             {passwordless ? t('auth.usePassword') : t('auth.useMagicLink')}
           </button>
 
-          <div className="mt-6 text-center text-sm">
+          {siteSettings.allowRegistration && <div className="mt-6 text-center text-sm">
             {t('auth.noAccount')}{' '}
             <Link to="/register" className="text-primary-500 hover:underline font-medium">{t('auth.createAccount')}</Link>
-          </div>
+          </div>}
 
         </div>
 
-        <p className="text-center text-[10px] text-dark-500 mt-6">{t('common.brand')} — AI Workspace</p>
+        <p className="text-center text-[10px] text-dark-500 mt-6">{tr(siteSettings.siteNameAr, siteSettings.siteNameEn)} — AI Workspace</p>
       </div>
     </div>
   )

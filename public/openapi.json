@@ -15,6 +15,13 @@
     "/api/v1/articles": { "get": { "summary": "List or retrieve published articles", "parameters": [{ "name": "slug", "in": "query", "schema": { "type": "string" } }, { "name": "section", "in": "query", "schema": { "type": "string" } }, { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1 } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50 } }], "responses": { "200": { "description": "Articles and pagination" } } } },
     "/api/v1/announcements": { "get": { "summary": "List active announcements", "parameters": [{ "name": "placement", "in": "query", "schema": { "type": "string", "enum": ["top", "dashboard"] } }], "responses": { "200": { "description": "Announcements" } } } },
     "/api/v1/content/summary": { "get": { "summary": "Published content totals", "responses": { "200": { "description": "Content totals" } } } },
+    "/api/v1/site": { "get": { "summary": "Public brand, feature, and navigation configuration", "responses": { "200": { "description": "Sanitized site configuration" } } } },
+    "/api/site-settings": {
+      "get": { "summary": "Read complete site configuration", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Site settings and navigation" }, "403": { "description": "Administrator role required" } } },
+      "post": { "summary": "Create a navigation entry", "security": [{ "bearerAuth": [] }], "responses": { "201": { "description": "Navigation entry created" } } },
+      "patch": { "summary": "Update site settings or a navigation entry", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Configuration updated" } } },
+      "delete": { "summary": "Delete a navigation entry", "security": [{ "bearerAuth": [] }], "responses": { "204": { "description": "Navigation entry deleted" } } }
+    },
     "/api/auth/register": { "post": { "summary": "Create a regular account", "responses": { "201": { "description": "Account created" } } } },
     "/api/auth/login": { "post": { "summary": "Password sign-in", "responses": { "200": { "description": "Session and profile" } } } },
     "/api/auth/me": { "get": { "summary": "Read the current profile", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Current user" } } } },

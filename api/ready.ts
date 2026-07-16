@@ -10,6 +10,7 @@ import articles from './_handlers/v1/articles.js'
 import contentSummary from './_handlers/v1/content-summary.js'
 import sections from './_handlers/v1/sections.js'
 import status from './_handlers/v1/status.js'
+import siteSettings from './_handlers/site-settings.js'
 
 const routedHandlers: Record<string, (req: VercelRequest, res: VercelResponse) => unknown> = {
   'platform-provider': platformProvider,
@@ -19,6 +20,7 @@ const routedHandlers: Record<string, (req: VercelRequest, res: VercelResponse) =
   'v1-content-summary': contentSummary,
   'v1-sections': sections,
   'v1-status': status,
+  'site-settings': siteSettings,
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

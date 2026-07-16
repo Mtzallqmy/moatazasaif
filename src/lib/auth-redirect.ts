@@ -1,31 +1,34 @@
 export const PRODUCTION_APP_URL = 'https://moatazalalqami.online'
 
-function isLocalOrigin(value: string) {
+function getPublicHttpsOrigin(value: string | undefined) {
+  if (!value) return null
   try {
     const url = new URL(value)
-    return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
+    const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
+    if (url.protocol !== 'https:' || isLocal) return null
+    return url.origin
   } catch {
-    return true
+    return null
   }
 }
 
 /**
- * Resolve a Supabase magic-link destination without ever sending users to a
- * local development server. A configured public URL wins; otherwise a real
- * HTTPS browser origin is used and localhost falls back to production.
+ * Resolve the OAuth and magic-link destination to the public origin the user is
+ * actually visiting. This prevents a stale Vercel environment variable from
+ * sending custom-domain visitors back to an old deployment hostname.
+ *
+ * Local development never becomes an OAuth destination: localhost falls back
+ * to the explicitly configured public URL, then to the production domain.
  */
 export function resolveAuthRedirectUrl(configured: string | undefined, currentOrigin: string, productionUrl = PRODUCTION_APP_URL) {
-  // Only an explicitly configured origin may override production. This keeps
-  // preview copies and arbitrary HTTPS hosts from becoming magic-link
-  // destinations when the public env variable is missing.
-  const candidate = configured?.trim() || productionUrl
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'https:' || isLocalOrigin(url.origin)) return `${productionUrl}/login`
-    return `${url.origin}/login`
-  } catch {
-    return `${productionUrl}/login`
-  }
+  const browserOrigin = getPublicHttpsOrigin(currentOrigin)
+  if (browserOrigin) return `${browserOrigin}/login`
+
+  const configuredOrigin = getPublicHttpsOrigin(configured)
+  if (configuredOrigin) return `${configuredOrigin}/login`
+
+  const productionOrigin = getPublicHttpsOrigin(productionUrl) || PRODUCTION_APP_URL
+  return `${productionOrigin}/login`
 }
 
 export function getAuthRedirectUrl() {

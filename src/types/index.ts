@@ -122,7 +122,28 @@ export type ChatAttachmentMimeType =
   | "image/webp"
   | "text/plain"
   | "text/markdown"
-  | "application/json";
+  | "application/json"
+  | "text/csv"
+  | "text/tab-separated-values"
+  | "application/xml"
+  | "text/xml"
+  | "application/yaml"
+  | "text/yaml"
+  | "application/x-yaml"
+  | "application/sql"
+  | "text/javascript"
+  | "application/javascript"
+  | "text/typescript"
+  | "application/typescript"
+  | "text/x-python"
+  | "text/html"
+  | "text/css"
+  | "text/x-shellscript";
+
+export type ChatTextAttachmentMimeType = Exclude<
+  ChatAttachmentMimeType,
+  "image/png" | "image/jpeg" | "image/webp"
+>;
 
 export type ChatAttachment =
   | {
@@ -134,10 +155,7 @@ export type ChatAttachment =
     }
   | {
       type: "text";
-      mimeType: Extract<
-        ChatAttachmentMimeType,
-        "text/plain" | "text/markdown" | "application/json"
-      >;
+      mimeType: ChatTextAttachmentMimeType;
       text: string;
       name?: string;
       size?: number;

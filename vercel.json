@@ -6,6 +6,7 @@
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/ready?route=sitemap" },
     { "source": "/api/platform-provider", "destination": "/api/ready?route=platform-provider" },
+    { "source": "/api/api-keys", "destination": "/api/ready?route=api-keys" },
     { "source": "/api/v1/health", "destination": "/api/ready?route=public-api-v1&publicRoute=health" },
     { "source": "/api/v1/account", "destination": "/api/ready?route=public-api-v1&publicRoute=account" },
     { "source": "/api/v1/models", "destination": "/api/ready?route=public-api-v1&publicRoute=models" },

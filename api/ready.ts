@@ -12,6 +12,7 @@ import sections from './_handlers/v1/sections.js'
 import status from './_handlers/v1/status.js'
 import siteSettings from './_handlers/site-settings.js'
 import publicApiV1 from './_handlers/public-api-v1.js'
+import apiKeys from './_handlers/api-keys.js'
 
 const routedHandlers: Record<string, (req: VercelRequest, res: VercelResponse) => unknown> = {
   'platform-provider': platformProvider,
@@ -23,6 +24,7 @@ const routedHandlers: Record<string, (req: VercelRequest, res: VercelResponse) =
   'v1-status': status,
   'site-settings': siteSettings,
   'public-api-v1': publicApiV1,
+  'api-keys': apiKeys,
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

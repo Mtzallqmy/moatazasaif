@@ -9,6 +9,14 @@ function platformRequest(messages: unknown[]) {
   return { credentialMode: 'platform', messages, stream: false }
 }
 
+function textAttachmentRequest(mimeType: string, text: string, name: string) {
+  return platformRequest([{
+    role: 'user',
+    content: 'حلل الملف',
+    attachments: [{ type: 'text', mimeType, text, name, size: Buffer.byteLength(text) }],
+  }])
+}
+
 afterEach(() => {
   delete process.env.PROVIDER_MAX_OUTPUT_TOKENS
 })
@@ -25,6 +33,26 @@ describe('chat attachment contract', () => {
     }]))
     expect(parsed.credentialMode).toBe('platform')
     expect(parsed.messages[0].attachments).toHaveLength(2)
+  })
+
+  it('accepts supported data, query, markup and source-code attachments', () => {
+    const samples = [
+      ['text/csv', 'name,value\nalpha,1', 'data.csv'],
+      ['text/tab-separated-values', 'name\tvalue\nalpha\t1', 'data.tsv'],
+      ['application/xml', '<root><value>1</value></root>', 'data.xml'],
+      ['application/yaml', 'service:\n  enabled: true', 'config.yaml'],
+      ['application/sql', 'select id from users;', 'query.sql'],
+      ['text/javascript', 'export const answer = 42', 'answer.js'],
+      ['text/typescript', 'export const answer: number = 42', 'answer.ts'],
+      ['text/x-python', 'print("hello")', 'hello.py'],
+      ['text/html', '<main>Hello</main>', 'index.html'],
+      ['text/css', 'main { display: block; }', 'style.css'],
+      ['text/x-shellscript', '#!/bin/sh\necho hello', 'hello.sh'],
+    ]
+
+    for (const [mimeType, text, name] of samples) {
+      expect(chatRequestSchema.safeParse(textAttachmentRequest(mimeType, text, name)).success).toBe(true)
+    }
   })
 
   it('rejects external image URLs, MIME spoofing, and inaccurate declared sizes', () => {
@@ -45,6 +73,12 @@ describe('chat attachment contract', () => {
     expect(chatRequestSchema.safeParse(platformRequest([{
       role: 'user', content: 'x', attachments: [{ type: 'text', mimeType: 'application/json', text: '{bad}' }],
     }])).success).toBe(false)
+  })
+
+  it('rejects binary data disguised as text and unsupported executable/archive MIME types', () => {
+    expect(chatRequestSchema.safeParse(textAttachmentRequest('text/plain', 'safe\u0000binary', 'payload.txt')).success).toBe(false)
+    expect(chatRequestSchema.safeParse(textAttachmentRequest('application/x-msdownload', 'MZ', 'payload.exe')).success).toBe(false)
+    expect(chatRequestSchema.safeParse(textAttachmentRequest('application/zip', 'PK', 'payload.zip')).success).toBe(false)
   })
 })
 

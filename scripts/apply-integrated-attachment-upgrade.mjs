@@ -1,3 +1,4 @@
+// One-shot branch upgrade runner. The workflow removes this file after successful verification.
 import fs from 'node:fs'
 import path from 'node:path'
 

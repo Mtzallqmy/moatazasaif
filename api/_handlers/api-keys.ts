@@ -1,8 +1,8 @@
 import { z } from 'zod'
-import type { VercelRequest, VercelResponse } from './_lib/vercel.js'
-import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from './_lib/http.js'
-import { authenticate, getAdminClient } from './_lib/supabase.js'
-import { API_SCOPES, generateApiKey } from './_lib/public-api.js'
+import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
+import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from '../_lib/http.js'
+import { authenticate, getAdminClient } from '../_lib/supabase.js'
+import { API_SCOPES, generateApiKey } from '../_lib/public-api.js'
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -25,7 +25,7 @@ const actionSchema = z.object({
 
 const publicColumns = 'id,name,environment,key_prefix,key_preview,scopes,allowed_models,allowed_services,allowed_ips,rate_limit_per_minute,daily_request_limit,monthly_request_limit,monthly_credit_limit,expires_at,last_used_at,last_used_ip,revoked_at,created_at,updated_at'
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function apiKeys(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)
   try {
     const auth = await authenticate(req)

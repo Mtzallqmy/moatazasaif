@@ -82,7 +82,27 @@ export const providerDeleteSchema = z.object({ id: z.string().uuid() }).strict()
 const attachmentName = z.string().trim().min(1).max(200).optional()
 const attachmentSize = z.number().int().min(0).max(3 * 1024 * 1024).optional()
 const imageMimeType = z.enum(['image/png', 'image/jpeg', 'image/webp'])
-const textMimeType = z.enum(['text/plain', 'text/markdown', 'application/json'])
+const textMimeType = z.enum([
+  'text/plain',
+  'text/markdown',
+  'application/json',
+  'text/csv',
+  'text/tab-separated-values',
+  'application/xml',
+  'text/xml',
+  'application/yaml',
+  'text/yaml',
+  'application/x-yaml',
+  'application/sql',
+  'text/javascript',
+  'application/javascript',
+  'text/typescript',
+  'application/typescript',
+  'text/x-python',
+  'text/html',
+  'text/css',
+  'text/x-shellscript',
+])
 const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024
 
 function decodedImage(value: string) {
@@ -94,6 +114,17 @@ function decodedImage(value: string) {
 function roughlyMatchesSize(declared: number | undefined, actual: number) {
   if (declared === undefined) return true
   return Math.abs(declared - actual) <= Math.max(32, Math.ceil(actual * 0.01))
+}
+
+function looksLikeBinaryText(value: string) {
+  const sample = value.slice(0, 8_192)
+  if (sample.includes('\u0000')) return true
+  let controlCharacters = 0
+  for (let index = 0; index < sample.length; index += 1) {
+    const code = sample.charCodeAt(index)
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlCharacters += 1
+  }
+  return controlCharacters > Math.max(4, Math.ceil(sample.length * 0.01))
 }
 
 export const chatAttachmentSchema = z.discriminatedUnion('type', [
@@ -132,6 +163,7 @@ export const chatAttachmentSchema = z.discriminatedUnion('type', [
     const actual = Buffer.byteLength(attachment.text, 'utf8')
     if (actual > MAX_ATTACHMENT_BYTES) context.addIssue({ code: 'custom', path: ['text'], message: 'حجم الملف النصي أكبر من الحد المسموح' })
     if (!roughlyMatchesSize(attachment.size, actual)) context.addIssue({ code: 'custom', path: ['size'], message: 'الحجم المصرح لا يطابق النص' })
+    if (looksLikeBinaryText(attachment.text)) context.addIssue({ code: 'custom', path: ['text'], message: 'الملف يحتوي بيانات ثنائية غير مسموحة' })
     if (attachment.mimeType === 'application/json') {
       try { JSON.parse(attachment.text) } catch { context.addIssue({ code: 'custom', path: ['text'], message: 'مرفق JSON غير صالح' }) }
     }

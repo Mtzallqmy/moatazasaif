@@ -17,9 +17,30 @@ export interface ProviderChatMessage {
   attachments?: ProviderAttachment[]
 }
 
+export type ProviderTextAttachmentMimeType =
+  | 'text/plain'
+  | 'text/markdown'
+  | 'application/json'
+  | 'text/csv'
+  | 'text/tab-separated-values'
+  | 'application/xml'
+  | 'text/xml'
+  | 'application/yaml'
+  | 'text/yaml'
+  | 'application/x-yaml'
+  | 'application/sql'
+  | 'text/javascript'
+  | 'application/javascript'
+  | 'text/typescript'
+  | 'application/typescript'
+  | 'text/x-python'
+  | 'text/html'
+  | 'text/css'
+  | 'text/x-shellscript'
+
 export type ProviderAttachment =
   | { type: 'image'; mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; dataUrl: string; name?: string; size?: number }
-  | { type: 'text'; mimeType: 'text/plain' | 'text/markdown' | 'application/json'; text: string; name?: string; size?: number }
+  | { type: 'text'; mimeType: ProviderTextAttachmentMimeType; text: string; name?: string; size?: number }
 
 export interface ProviderUsage {
   inputTokens: number

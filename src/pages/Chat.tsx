@@ -487,9 +487,21 @@ export default function Chat() {
     let uploadedFileIds: string[] = [];
     let messageSaved = false;
     try {
-      const persistedAttachments = !isSession && submittedAttachments.length
-        ? await uploadChatAttachments(currentChat.id, messageId, submittedAttachments)
-        : submittedAttachments;
+      let persistedAttachments: Message["attachments"] = submittedAttachments;
+      if (!isSession && submittedAttachments.length) {
+        try {
+          persistedAttachments = await uploadChatAttachments(currentChat.id, messageId, submittedAttachments);
+        } catch {
+          // Keep the pre-storage behavior available while a deployment is
+          // waiting for its database migration or storage is temporarily down.
+          // The provider still receives the verified inline files and the
+          // message API persists metadata only; no raw file is written to DB.
+          toast.warning(tr(
+            "تعذر الحفظ الدائم للمرفق؛ سيُحلّل في هذه الرسالة دون تخزينه.",
+            "Permanent attachment storage is unavailable; it will still be analyzed without being stored.",
+          ));
+        }
+      }
       uploadedFileIds = persistedAttachments.flatMap((attachment) => "fileId" in attachment && attachment.fileId ? [attachment.fileId] : []);
       const userMessage: Message = {
         id: messageId,

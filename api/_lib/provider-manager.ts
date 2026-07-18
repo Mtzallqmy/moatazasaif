@@ -101,6 +101,7 @@ export function retryDelay(attempt: number, baseMs = 250, maxMs = 4_000) {
 
 export function isRetryableProviderError(error: unknown) {
   if (error instanceof ProviderRequestError) {
+    if (error.details.code === 'aborted') return false
     const status = error.details.status
     return !status || status === 408 || status === 429 || status === 502 || status === 503 || status === 504
   }
@@ -108,38 +109,63 @@ export function isRetryableProviderError(error: unknown) {
   return false
 }
 
-export async function withProviderRetry<T>(operation: (signal: AbortSignal) => Promise<T>, options: { retries?: number; signal?: AbortSignal } = {}) {
+export function providerTimeoutMs(value?: number) {
+  const fallback = getProviderRuntimeEnv().PROVIDER_TIMEOUT_MS
+  const timeout = Number.isFinite(value) ? Number(value) : fallback
+  return Math.max(5_000, Math.min(55_000, Math.round(timeout)))
+}
+
+function providerAttemptSignal(parent: AbortSignal | undefined, timeoutMs: number) {
+  const timeout = AbortSignal.timeout(providerTimeoutMs(timeoutMs))
+  return parent ? AbortSignal.any([parent, timeout]) : timeout
+}
+
+async function waitForRetry(delayMs: number, signal?: AbortSignal) {
+  if (signal?.aborted) throw new DOMException('تم إيقاف الطلب', 'AbortError')
+  await new Promise<void>((resolve, reject) => {
+    const done = () => {
+      signal?.removeEventListener('abort', aborted)
+      resolve()
+    }
+    const aborted = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', aborted)
+      reject(new DOMException('تم إيقاف الطلب', 'AbortError'))
+    }
+    const timer = setTimeout(done, delayMs)
+    signal?.addEventListener('abort', aborted, { once: true })
+  })
+}
+
+export async function withProviderRetry<T>(operation: (signal: AbortSignal) => Promise<T>, options: { retries?: number; signal?: AbortSignal; timeoutMs?: number } = {}) {
   const retries = Math.max(0, Math.min(5, options.retries ?? 2))
   let lastError: unknown
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     if (options.signal?.aborted) throw new DOMException('تم إيقاف الطلب', 'AbortError')
-    const controller = new AbortController()
-    const abort = () => controller.abort()
-    options.signal?.addEventListener('abort', abort, { once: true })
     try {
-      return await operation(controller.signal)
+      return await operation(providerAttemptSignal(options.signal, providerTimeoutMs(options.timeoutMs)))
     } catch (error) {
       lastError = error
       if (attempt >= retries || !isRetryableProviderError(error)) throw error
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, retryDelay(attempt))
-        options.signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('تم إيقاف الطلب', 'AbortError')) }, { once: true })
-      })
-    } finally {
-      options.signal?.removeEventListener('abort', abort)
+      await waitForRetry(retryDelay(attempt), options.signal)
     }
   }
   throw lastError || new Error('provider_retry_failed')
 }
 
-export function selectProviderCandidates<T extends Pick<ProviderManagerRecord, 'id' | 'model' | 'models' | 'priority' | 'health_status' | 'circuit_state' | 'circuit_next_retry_at' | 'is_enabled'>>(providers: T[], requestedModel?: string) {
+export function selectProviderCandidates<T extends Pick<ProviderManagerRecord, 'id' | 'model' | 'models' | 'priority' | 'health_status' | 'circuit_state' | 'circuit_next_retry_at' | 'is_enabled'> & Partial<Pick<ProviderManagerRecord, 'availability' | 'latency_ms'>>>(providers: T[], requestedModel?: string) {
   const model = requestedModel?.trim().toLowerCase()
   return providers
     .filter((provider) => isCircuitAvailable(provider))
     .filter((provider) => !model || provider.model?.toLowerCase() === model || provider.models.some((candidate) => candidate.toLowerCase() === model) || provider.models.length === 0)
     .sort((left, right) => {
-      const healthRank = (value: ProviderHealthStatus) => value === 'healthy' ? 0 : value === 'degraded' ? 1 : value === 'unknown' ? 2 : 3
-      return left.priority - right.priority || healthRank(left.health_status) - healthRank(right.health_status)
+      const healthRank = (value: ProviderHealthStatus) => value === 'healthy' ? 0 : value === 'unknown' ? 1 : value === 'degraded' ? 2 : 3
+      const circuitRank = (value: ProviderCircuitState) => value === 'closed' ? 0 : value === 'half_open' ? 1 : 2
+      return healthRank(left.health_status) - healthRank(right.health_status)
+        || circuitRank(left.circuit_state) - circuitRank(right.circuit_state)
+        || left.priority - right.priority
+        || (right.availability ?? -1) - (left.availability ?? -1)
+        || (left.latency_ms ?? Number.MAX_SAFE_INTEGER) - (right.latency_ms ?? Number.MAX_SAFE_INTEGER)
     })
 }
 
@@ -300,7 +326,7 @@ export async function runScheduledProviderHealthChecks(admin: SupabaseClient, li
 }
 
 export async function runProviderRetry<T>(provider: ProviderManagerRecord, operation: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal) {
-  return withProviderRetry(operation, { retries: provider.retries, signal })
+  return withProviderRetry(operation, { retries: provider.retries, signal, timeoutMs: provider.timeout_ms })
 }
 
 export async function* streamProviderRetry<T>(provider: ProviderManagerRecord, operation: (signal: AbortSignal) => AsyncGenerator<T>, signal?: AbortSignal) {
@@ -308,26 +334,21 @@ export async function* streamProviderRetry<T>(provider: ProviderManagerRecord, o
   const retries = Math.max(0, Math.min(5, provider.retries ?? 2))
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     if (signal?.aborted) throw new DOMException('تم إيقاف الطلب', 'AbortError')
-    const controller = new AbortController()
-    const abort = () => controller.abort()
-    signal?.addEventListener('abort', abort, { once: true })
     let yielded = false
     try {
-      for await (const event of operation(controller.signal)) { yielded = true; yield event }
+      for await (const event of operation(providerAttemptSignal(signal, provider.timeout_ms))) { yielded = true; yield event }
       return
     } catch (error) {
       lastError = error
       if (yielded || attempt >= retries || !isRetryableProviderError(error)) throw error
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, retryDelay(attempt))
-        signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('تم إيقاف الطلب', 'AbortError')) }, { once: true })
-      })
-    } finally {
-      signal?.removeEventListener('abort', abort)
-      controller.abort()
+      await waitForRetry(retryDelay(attempt), signal)
     }
   }
   throw lastError || new Error('provider_stream_retry_failed')
+}
+
+export function shouldFailOverProviderStream(input: { savedCredentials: boolean; sentProviderOutput: boolean; sentDone: boolean }) {
+  return input.savedCredentials && !input.sentProviderOutput && !input.sentDone
 }
 
 export function managerRequestMessages(messages: ProviderChatMessage[]) {

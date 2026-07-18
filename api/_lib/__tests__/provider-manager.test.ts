@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { circuitTransition, isRetryableProviderError, providerHealthStatus, retryDelay, selectProviderCandidates } from '../provider-manager.js'
+import { circuitTransition, isRetryableProviderError, providerHealthStatus, providerTimeoutMs, retryDelay, selectProviderCandidates, shouldFailOverProviderStream } from '../provider-manager.js'
 import { ProviderRequestError } from '../providers/types.js'
 
 describe('provider manager policies', () => {
@@ -27,10 +27,27 @@ describe('provider manager policies', () => {
     expect(selectProviderCandidates(providers, 'x').map((provider) => provider.id)).toEqual(['fast', 'slow'])
   })
 
+  it('prefers a healthy provider over an offline provider with a lower numeric priority', () => {
+    const providers = [
+      { id: 'offline', model: 'x', models: ['x'], priority: 0, health_status: 'offline' as const, circuit_state: 'closed' as const, circuit_next_retry_at: null, is_enabled: true, availability: 0.2, latency_ms: 50 },
+      { id: 'healthy', model: 'x', models: ['x'], priority: 50, health_status: 'healthy' as const, circuit_state: 'closed' as const, circuit_next_retry_at: null, is_enabled: true, availability: 0.99, latency_ms: 200 },
+    ]
+    expect(selectProviderCandidates(providers, 'x').map((provider) => provider.id)).toEqual(['healthy', 'offline'])
+  })
+
   it('retries only transient upstream failures', () => {
     expect(isRetryableProviderError(new ProviderRequestError({ status: 503, message: 'unavailable' }))).toBe(true)
     expect(isRetryableProviderError(new ProviderRequestError({ status: 401, message: 'bad key' }))).toBe(false)
+    expect(isRetryableProviderError(new ProviderRequestError({ code: 'aborted', message: 'cancelled' }))).toBe(false)
     expect(retryDelay(1)).toBeGreaterThan(0)
+  })
+
+  it('bounds provider timeouts and only fails over before streamed content starts', () => {
+    expect(providerTimeoutMs(500)).toBe(5_000)
+    expect(providerTimeoutMs(90_000)).toBe(55_000)
+    expect(shouldFailOverProviderStream({ savedCredentials: true, sentProviderOutput: false, sentDone: false })).toBe(true)
+    expect(shouldFailOverProviderStream({ savedCredentials: true, sentProviderOutput: true, sentDone: false })).toBe(false)
+    expect(shouldFailOverProviderStream({ savedCredentials: false, sentProviderOutput: false, sentDone: false })).toBe(false)
   })
 
   it('maps latency and failure category to actionable health state', () => {

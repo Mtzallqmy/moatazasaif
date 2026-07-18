@@ -31,6 +31,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { usePreferences } from "../contexts/PreferencesContext";
 import type { Provider, ProviderDiagnostic, ProviderType } from "../types";
 import PlatformProviderPanel from "../features/providers/PlatformProviderPanel";
+import { ProviderOperationsSummary } from "../features/providers/ProviderOperationsSummary";
 
 const categoryLabels: Record<string, readonly [string, string]> = {
   authentication: ["فشل المصادقة", "Authentication failed"],
@@ -477,23 +478,20 @@ export default function Providers() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-start justify-between mb-8 gap-4">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <ProviderOperationsSummary
+        providers={providers}
+        loading={loading}
+        canOpenDiagnostics={Boolean(user && ["owner", "admin", "manager"].includes(user.role))}
+        onRefresh={() => void loadProviders()}
+        onOpenDiagnostics={() => navigate("/developer/diagnostics")}
+      />
+      <div className="provider-page-toolbar">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {tr("مزودو الذكاء الاصطناعي", "AI providers")}
-          </h1>
-          <p className="text-dark-400 mt-1">
-            {tr(
-              "اختبار فعلي للمفتاح واكتشاف النماذج. لا تظهر مفاتيح المزودات المحفوظة مرة أخرى.",
-              "Verify keys with a live request and discover models. Saved provider keys are never shown again.",
-            )}
-          </p>
+          <h2>{tr("اتصالات المزودات", "Provider connections")}</h2>
+          <p>{tr("اختبار حي، اكتشاف للنماذج، وحفظ مشفّر للمفاتيح.", "Live verification, model discovery, and encrypted key storage.")}</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="btn btn-primary"
-        >
+        <button type="button" onClick={() => setShowAddModal(true)} className="btn btn-primary">
           <Plus size={18} /> {tr("إضافة مزود", "Add provider")}
         </button>
       </div>
@@ -557,9 +555,29 @@ export default function Providers() {
             </div>
           ) : (
             <>
-              <div className="card p-3 mb-4 flex flex-wrap gap-3 items-center"><input className="input flex-1 min-w-48" value={providerQuery} onChange={(event) => setProviderQuery(event.target.value)} placeholder={tr("بحث في المزودات", "Search providers")} /><select className="input w-auto" value={providerSort} onChange={(event) => setProviderSort(event.target.value as typeof providerSort)}><option value="priority">{tr("حسب الأولوية", "By priority")}</option><option value="name">{tr("حسب الاسم", "By name")}</option><option value="latency">{tr("حسب السرعة", "By latency")}</option></select></div>
-              <div className="grid gap-4">
-              {visibleProviders.map((provider) => (
+              <div className="provider-filter-bar">
+                <label className="provider-search-field">
+                  <Search size={17} aria-hidden="true" />
+                  <span className="sr-only">{tr("بحث في المزودات", "Search providers")}</span>
+                  <input value={providerQuery} onChange={(event) => setProviderQuery(event.target.value)} placeholder={tr("ابحث بالاسم أو النوع أو النموذج", "Search name, type, or model")} />
+                </label>
+                <label className="provider-sort-field">
+                  <span>{tr("الترتيب", "Sort")}</span>
+                  <select value={providerSort} onChange={(event) => setProviderSort(event.target.value as typeof providerSort)}>
+                    <option value="priority">{tr("حسب الأولوية", "By priority")}</option>
+                    <option value="name">{tr("حسب الاسم", "By name")}</option>
+                    <option value="latency">{tr("حسب السرعة", "By latency")}</option>
+                  </select>
+                </label>
+              </div>
+              {visibleProviders.length === 0 ? (
+                <div className="card provider-empty-filter" role="status">
+                  <Search size={26} aria-hidden="true" />
+                  <strong>{tr("لا توجد نتيجة مطابقة", "No matching provider")}</strong>
+                  <span>{tr("جرّب اسمًا أو نموذجًا آخر.", "Try another name or model.")}</span>
+                </div>
+              ) : <div className="grid gap-4">
+                {visibleProviders.map((provider) => (
                 <ProviderCard
                   key={provider.id}
                   provider={provider}
@@ -576,8 +594,8 @@ export default function Providers() {
                   onStart={() => navigate("/chat")}
                   onModelChange={(model) => void updateModel(provider, model)}
                 />
-              ))}
-              </div>
+                ))}
+              </div>}
             </>
           )}
         </>
@@ -830,13 +848,22 @@ function ProviderCard({
   );
   const diagnostic = provider.diagnostic;
   const models = provider.models || [];
+  const managedProvider = isSession ? undefined : provider as Provider;
+  const effectiveStatus = testing
+    ? "testing"
+    : managedProvider?.healthStatus === "offline" || managedProvider?.circuit?.state === "open"
+      ? "error"
+      : managedProvider?.healthStatus === "healthy"
+        ? "connected"
+        : provider.status;
+  const latency = managedProvider?.latency ?? managedProvider?.lastLatencyMs ?? diagnostic?.latencyMs;
   return (
-    <div className="card overflow-hidden mb-4">
+    <div className="card provider-connection-card overflow-hidden mb-4">
       <div className="p-5 flex flex-col md:flex-row md:items-center gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
             <div className="font-semibold text-lg">{provider.name}</div>
-            <StatusBadge status={testing ? "testing" : provider.status} />
+            <StatusBadge status={effectiveStatus} />
           </div>
           <div className="text-sm text-dark-400">
             {definition?.label || provider.type} • {provider.protocol} •{" "}
@@ -846,17 +873,18 @@ function ProviderCard({
             {diagnostic?.endpoint && (
               <span dir="ltr">Endpoint: {diagnostic.endpoint}</span>
             )}
-            {diagnostic?.latencyMs !== undefined && (
+            {latency !== undefined && latency !== null && (
               <span>
-                <Clock3 size={12} className="inline" /> {diagnostic.latencyMs}ms
+                <Clock3 size={12} className="inline" /> {latency}ms
               </span>
             )}
             {diagnostic?.httpStatus && (
               <span>HTTP {diagnostic.httpStatus}</span>
             )}
-            {provider.healthStatus && <span>{tr('الصحة', 'Health')}: {provider.healthStatus}</span>}
-            {provider.availability !== undefined && <span>{tr('التوفر', 'Availability')}: {Math.round(provider.availability * 100)}%</span>}
-            {provider.circuit && <span>{tr('الدائرة', 'Circuit')}: {provider.circuit.state}</span>}
+            {managedProvider?.healthStatus && <span>{tr('الصحة', 'Health')}: {managedProvider.healthStatus}</span>}
+            {managedProvider?.availability !== undefined && <span>{tr('التوفر', 'Availability')}: {Math.round(managedProvider.availability * 100)}%</span>}
+            {managedProvider?.circuit && <span>{tr('الدائرة', 'Circuit')}: {managedProvider.circuit.state}</span>}
+            {managedProvider?.timeout && <span>{tr('المهلة', 'Timeout')}: {Math.round(managedProvider.timeout / 1000)}s</span>}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -894,7 +922,7 @@ function ProviderCard({
           )}
           <button
             onClick={onStart}
-            disabled={provider.status !== "connected" || !provider.model}
+            disabled={effectiveStatus !== "connected" || !provider.model}
             className="btn btn-primary text-xs py-2"
           >
             {tr("بدء محادثة", "Start chat")}

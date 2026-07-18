@@ -8,7 +8,7 @@ import { ephemeralProviderRecord, ephemeralRateLimitParts, loadOwnedProviderCred
 import { logTechnicalError, redactText, redactUnknown } from './_lib/redaction.js'
 import { estimatePlatformTokens, finalizePlatformUsage, loadPlatformProviderCredentials, reservePlatformUsage } from './_lib/platform-provider.js'
 import { assertMultimodalSupport } from './_lib/providers/multimodal.js'
-import { recordProviderOutcome, runProviderRetry, selectProviderCandidates, streamProviderRetry, type ProviderManagerRecord } from './_lib/provider-manager.js'
+import { recordProviderOutcome, runProviderRetry, selectProviderCandidates, shouldFailOverProviderStream, streamProviderRetry, type ProviderManagerRecord } from './_lib/provider-manager.js'
 
 function writeSse(res: VercelResponse, event: ProviderStreamEvent['event'], data: unknown, extraSecrets: string[] = []) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(redactUnknown(data, extraSecrets, 0, Number.MAX_SAFE_INTEGER))}\n\n`)
@@ -135,6 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     req.once('aborted', abort)
     res.once('close', abort)
     let sentDone = false
+    let sentProviderOutput = false
 
     try {
       platformGenerationStarted = true
@@ -152,6 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               ? { ...message.data, provider: 'platform', endpoint: undefined }
               : message.data
             writeSse(res, message.event, publicData, [candidate.apiKey])
+            if (message.event === 'delta' && message.data.content) sentProviderOutput = true
             if (message.event === 'done') sentDone = true
           }
           streamCompleted = true
@@ -161,7 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           lastStreamError = providerError
           const diagnostic = providerDiagnostic(providerError, inferProtocol(candidate.provider.type, candidate.provider.base_url, candidate.provider.protocol), candidateStartedAt, [candidate.apiKey])
           if (savedUserId) await recordProviderOutcome(getAdminClient(), candidate.provider.id, savedUserId, { success: false, latencyMs: Date.now() - candidateStartedAt, diagnostic, model })
-          if (body.credentialMode !== 'saved' || sentDone) throw providerError
+          if (!shouldFailOverProviderStream({ savedCredentials: body.credentialMode === 'saved', sentProviderOutput, sentDone })) throw providerError
         }
       }
       if (!streamCompleted && lastStreamError) throw lastStreamError

@@ -42,7 +42,13 @@ export async function providerFetch(url: string, init: RequestInit = {}, callerS
     return await fetch(url, { ...init, signal, redirect: 'error' })
   } catch (error: any) {
     if (callerSignal?.aborted) {
-      throw new ProviderRequestError({ message: 'تم إيقاف الطلب', code: 'aborted', endpoint: sanitizeProviderEndpoint(url), causeName: error?.name })
+      const callerTimedOut = (callerSignal.reason as { name?: string } | undefined)?.name === 'TimeoutError'
+      throw new ProviderRequestError({
+        message: callerTimedOut ? 'انتهت مهلة اتصال المزود' : 'تم إيقاف الطلب',
+        code: callerTimedOut ? 'timeout' : 'aborted',
+        endpoint: sanitizeProviderEndpoint(url),
+        causeName: error?.name,
+      })
     }
     if (timeoutSignal.aborted || error?.name === 'TimeoutError') {
       throw new ProviderRequestError({ message: 'انتهت مهلة اتصال المزود', code: 'timeout', endpoint: sanitizeProviderEndpoint(url), causeName: error?.name })

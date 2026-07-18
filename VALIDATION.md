@@ -9,8 +9,9 @@ npm ci --no-audit --no-fund       PASS
 npm run lint                     PASS
 npm run typecheck                PASS
 npm run typecheck:api            PASS
-npm run test                     PASS — 29 ملفًا / 111 اختبارًا
+npm run test                     PASS — 29 ملفًا / 113 اختبارًا
 npm run build                    PASS
+npm audit --omit=dev             PASS — 0 ثغرات
 ```
 
 الاختبارات تستخدم Mock لـ `fetch` وSupabase وIndexedDB، ولا تستخدم مفاتيح حقيقية.
@@ -19,6 +20,9 @@ npm run build                    PASS
 التنقيح، Webhook Secret، Deduplication، Link Code، Allowlist، والسياق مع Provider Runtime.
 وتشمل أيضًا سياسات Provider Manager النقية: ترتيب الأولوية، Health Status، Circuit
 Breaker، Retry مع Exponential Backoff، Failover قبل أول chunk، واكتشاف النماذج.
+وتغطي هذه الدفعة أيضًا حدود مهلة كل مزود، وعدم إعادة محاولة الطلب الملغى، وتفضيل
+المزود السليم على مزود Offline حتى لو كانت أولوية الأخير الرقمية أعلى، ومنع Failover
+بعد إرسال أول جزء من محتوى البث حتى لا تختلط إجابتان في المحادثة نفسها.
 
 ## رحلة المستخدم
 

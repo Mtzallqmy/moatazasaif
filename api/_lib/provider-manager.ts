@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getProviderRuntimeEnv } from './env.js'
-import { decryptSecret } from './crypto.js'
 import { ApiError } from './http.js'
 import { logTechnicalError, redactText, redactUnknown } from './redaction.js'
 import { ProviderRequestError, type ProviderChatMessage } from './providers/types.js'

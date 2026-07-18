@@ -7,8 +7,9 @@
 3. للمشروع الموجود، نفّذ أيضًا `supabase/migrations/20260714190000_byok_provider_protocol.sql` (يمكن تكراره بأمان).
 4. نفّذ migration Telegram الجديدة `supabase/migrations/20260714203349_telegram_integrations.sql`.
 5. نفّذ migration الاتصالات `supabase/migrations/20260715222138_external_integrations.sql`.
-6. تأكد أن التنفيذ انتهى دون أخطاء.
-7. لا تمنح `authenticated` أو `anon` صلاحيات مباشرة على جداول الأسرار أو جدولي `providers` و`external_integrations`؛ الإدارة تتم عبر API الخادمي فقط.
+6. نفّذ `supabase/migrations/20260718120000_provider_manager.sql` لإضافة Health/Circuit/Retry/Logs (قابلة لإعادة التنفيذ ولا تحذف البيانات).
+7. تأكد أن التنفيذ انتهى دون أخطاء.
+8. لا تمنح `authenticated` أو `anon` صلاحيات مباشرة على جداول الأسرار أو جدولي `providers` و`external_integrations`؛ الإدارة تتم عبر API الخادمي فقط.
 
 ## 2. متغيرات Vercel
 
@@ -25,6 +26,8 @@
 - `TELEGRAM_WEBHOOK_PROCESSING_TIMEOUT_MS`
 - `TELEGRAM_MAX_CONTEXT_MESSAGES`
 - `TELEGRAM_MAX_RESPONSE_CHARACTERS`
+- `CRON_SECRET` — سر عشوائي طويل لفحص الصحة المجدول (مرة يوميًا على Hobby؛ يمكن زيادة التواتر على Pro).
+- `PROVIDER_TIMEOUT_MS`, `PROVIDER_MAX_RESPONSE_BYTES`, `PROVIDER_MAX_OUTPUT_TOKENS`
 
 لا تغيّر `ENCRYPTION_KEY` بعد إضافة المزودات؛ تغييره يجعل المفاتيح المخزنة سابقًا غير قابلة لفك التشفير. عند الحاجة إلى تدويره، أعد إدخال مفاتيح المزودات أو نفّذ خطة إعادة تشفير.
 
@@ -61,9 +64,13 @@ BOOTSTRAP_TOKEN=رمز-عشوائي-طويل-جداً
 - ولّد كود الربط، أرسل `/connect CODE` إلى البوت، ثم أرسل رسالة عادية وتحقق من وصول رد النموذج الحقيقي.
 - من صفحة التكاملات اختبر Fine-grained GitHub PAT ثم احفظه واعرض قائمة المستودعات.
 - إذا توفرت بيانات Meta، اختبر System User token وPhone Number ID ثم أرسل رسالة WhatsApp إلى رقم تجريبي بصيغة دولية.
+- افتح `/developer/diagnostics` بحساب مالك/مدير، ثم نفّذ Test وHealth وDiscover Models وتأكد من تحديث latency/counters وCircuit.
+- صدّر Logs بصيغة JSON وCSV، وتحقق من عدم وجود API keys أو Authorization أو `encrypted_key`.
 
 ## 5. حدود النسخة الحالية
 
 - لا يوجد نظام دفع أو اشتراكات داخلية.
 - GitHub مفعّل للاختبار وعرض المستودعات، وWhatsApp مفعّل للاختبار والإرسال النصي. عمليات GitHub الكتابية واستقبال WhatsApp وMCP ووضع الوكيل تبقى غير مفعّلة حتى تعريف صلاحياتها وأسرارها المطلوبة.
 - الاختبارات الآلية لا تتصل بمفاتيح مزودات حقيقية؛ اختبار الاتصال الحقيقي يتم بعد إضافة مفاتيحك من لوحة المزودات.
+- Vercel Functions لا تعتمد على ذاكرة محلية كطابور دائم؛ `queueSize` تشخيصي ويظل 0. للمهام الطويلة أضف Queue خارجية (مثل Vercel Queues/Upstash) قبل تفعيلها.
+- على خطة Hobby فحص الصحة مجدول يوميًا فقط بسبب قيد Vercel؛ استخدم Pro أو Scheduler خارجي لفحص متكرر.

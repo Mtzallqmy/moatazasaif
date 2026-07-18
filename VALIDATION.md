@@ -9,7 +9,7 @@ npm ci --no-audit --no-fund       PASS
 npm run lint                     PASS
 npm run typecheck                PASS
 npm run typecheck:api            PASS
-npm run test                     PASS — 12 ملفات / 45 اختبارًا
+npm run test                     PASS — 29 ملفًا / 111 اختبارًا
 npm run build                    PASS
 ```
 
@@ -17,6 +17,8 @@ npm run build                    PASS
 وتشمل عميل Telegram (`getMe`, `setWebhook`, `getWebhookInfo`, `deleteWebhook`,
 `sendChatAction`, `sendMessage`, `setMyCommands`)، أخطاء 429 وإعادة المحاولة،
 التنقيح، Webhook Secret، Deduplication، Link Code، Allowlist، والسياق مع Provider Runtime.
+وتشمل أيضًا سياسات Provider Manager النقية: ترتيب الأولوية، Health Status، Circuit
+Breaker، Retry مع Exponential Backoff، Failover قبل أول chunk، واكتشاف النماذج.
 
 ## رحلة المستخدم
 
@@ -41,11 +43,24 @@ npm run build                    PASS
 | Secrets absent from responses and logs | PASS | اختبارات redaction وTelegram |
 | Production build successful | PASS | `npm run build` |
 
+## تحقق Vercel الإنتاجي
+
+| الفحص | النتيجة | الدليل |
+|---|---|---|
+| Deployment from `main` | PASS | `eea7b2f37a53aa06ebe30f427bd185d6278774ab` → READY |
+| `GET /api/health` | PASS | HTTP 200 على `https://moatazasaif.vercel.app` |
+| `GET /api/ready` | PASS | HTTP 200 على `https://moatazasaif.vercel.app` |
+| Diagnostics without JWT | PASS | HTTP 401 (حماية متوقعة) |
+| Cron health without `CRON_SECRET` | PASS | HTTP 401 (حماية متوقعة) |
+
 ## ما لم يُختبر خارجيًا
 
 لم يتم الادعاء باختبار Telegram الحقيقي أو Vercel Webhook الحقيقي: يلزم Bot Token فعلي،
 نطاق Vercel منشور عبر HTTPS، وقاعدة Supabase التي تحتوي Migration. كما لم تُطبق Migration
-على المشروع البعيد في هذه الجلسة بسبب عدم توفر صلاحية الاتصال به.
+على المشروع البعيد في هذه الجلسة بسبب عدم توفر صلاحية الاتصال به. النطاق
+`www.moatazalalqami.online` يعيد 404 لمسارات `/api` لأنه تطبيق Sites/Vinext منفصل؛
+لم يُحدّث في هذه الجلسة لأن موصل Sites رفض طلب الوصول. النشر الذي تم التحقق منه هو
+`https://moatazasaif.vercel.app`.
 
 ## المراجعة الأمنية
 
@@ -68,3 +83,7 @@ npm run build                    PASS
 - `POST /api/integrations/telegram/link-code`
 - `POST /api/integrations/telegram/webhook` (بدون JWT؛ عبر Secret Header)
 - `GET /api/health`, `GET /api/ready`
+- `GET /api/providers/diagnostics` (JWT؛ JSON أو `?logs=true&format=csv`)
+- `POST /api/providers/diagnostics` (JWT؛ `test|health|discover|reload|reset-circuit`)
+- `GET /api/providers/logs` (مرادف للتشخيص مع تصدير JSON/CSV)
+- `GET /api/providers/health` (Cron؛ يتطلب `Authorization: Bearer $CRON_SECRET`)

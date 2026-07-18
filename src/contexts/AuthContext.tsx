@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import type { User } from '../types'
 import { apiJson, authHeaders } from '../lib/api'
-import { getSupabaseBrowserConfig, supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import { getAuthRedirectUrl } from '../lib/auth-redirect'
-import { getOAuthProviderAvailability, type OAuthProvider } from '../lib/oauth-provider'
+import type { OAuthProvider } from '../lib/oauth-provider'
 import { usePreferences } from './PreferencesContext'
 
 export type { OAuthProvider } from '../lib/oauth-provider'
@@ -126,35 +126,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signInWithOAuth = async (provider: OAuthProvider) => {
-    if (!supabase) {
-      toast.error(tr('خدمة تسجيل الدخول غير متاحة مؤقتًا.', 'Sign-in is temporarily unavailable.'))
-      return false
-    }
     try {
-      const browserConfig = getSupabaseBrowserConfig()
-      if (!browserConfig) throw new Error(tr('خدمة تسجيل الدخول غير مهيأة', 'The sign-in service is not configured'))
-
-      const availability = await getOAuthProviderAvailability(browserConfig, provider)
-      if (availability === 'disabled') {
-        toast.error(tr(`تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} غير متاح حاليًا.`, `Sign-in with ${provider === 'google' ? 'Google' : 'GitHub'} is currently unavailable.`))
-        return false
-      }
-      if (availability === 'unreachable') {
-        toast.error(tr('تعذر الوصول إلى خدمة تسجيل الدخول. تحقق من الشبكة أو DNS ثم أعد المحاولة.', 'The sign-in service could not be reached. Check your network or DNS and try again.'))
-        return false
-      }
-      if (availability === 'unknown') {
-        toast.error(tr('تعذر التحقق من خدمة تسجيل الدخول الآن. أعد المحاولة.', 'The sign-in service could not be verified. Please try again.'))
-        return false
-      }
-
-      // The authorization code is exchanged by a Vercel Function, which sets
-      // HttpOnly Secure cookies. No provider token is exposed to the page URL.
-      const query = new URLSearchParams({ provider })
-      window.location.assign(`/api/auth/oauth-start?${query.toString()}`)
+      // Start OAuth through the same-origin server route. This keeps login
+      // working even when a client-side Supabase build variable is missing or
+      // a mobile network blocks the optional Auth settings preflight.
+      const query = new URLSearchParams({ provider, format: 'json' })
+      const body = await apiJson<{ url: string }>(`/api/auth/oauth-start?${query.toString()}`)
+      const authorizationUrl = new URL(body.url)
+      if (authorizationUrl.protocol !== 'https:') throw new Error(tr('عنوان تسجيل الدخول غير آمن', 'The sign-in URL is not secure'))
+      window.location.assign(authorizationUrl.toString())
       return true
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'تعذر بدء تسجيل الدخول عبر المزود'
+      const typed = error as Error & { code?: string }
+      const message = typed instanceof Error ? typed.message : 'تعذر بدء تسجيل الدخول عبر المزود'
+      if (typed?.code === 'oauth_provider_disabled') {
+        toast.error(tr(`تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} غير مفعّل حاليًا.`, `Sign-in with ${provider === 'google' ? 'Google' : 'GitHub'} is not enabled right now.`))
+        return false
+      }
       if (/provider.*(not enabled|disabled|unsupported)/i.test(message)) {
         toast.error(tr(`تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'GitHub'} غير متاح حاليًا.`, `Sign-in with ${provider === 'google' ? 'Google' : 'GitHub'} is currently unavailable.`))
       } else if (/redirect|url.*not allowed/i.test(message)) {

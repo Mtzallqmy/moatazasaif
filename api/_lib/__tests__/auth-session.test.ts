@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clearSessionCookies, readAccessToken, readRefreshToken, setSessionCookies } from '../auth-session.js'
+import { clearOAuthVerifierCookie, clearSessionCookies, readAccessToken, readRefreshToken, requestAppOrigin, setSessionCookies } from '../auth-session.js'
 
 function responseDouble() {
   const headers = new Map<string, string | string[]>()
@@ -44,5 +44,21 @@ describe('secure auth cookies', () => {
     const { response, headers } = responseDouble()
     clearSessionCookies(response)
     expect((headers.get('set-cookie') as string[]).every((value) => value.includes('Max-Age=0'))).toBe(true)
+  })
+
+  it('keeps OAuth callbacks on the Vercel host that started the flow', () => {
+    vi.stubEnv('APP_URL', 'https://moatazalalqami.online')
+    vi.stubEnv('VERCEL_PROJECT_PRODUCTION_URL', 'moatazasaif.vercel.app')
+    const request = { headers: { host: 'moatazasaif.vercel.app' } } as any
+    expect(requestAppOrigin(request)).toBe('https://moatazasaif.vercel.app')
+  })
+
+  it('clears the short-lived OAuth verifier independently', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const { response, headers } = responseDouble()
+    clearOAuthVerifierCookie(response)
+    expect(headers.get('set-cookie')).toEqual([
+      expect.stringContaining('__Host-moataz-oauth-verifier=; Path=/; Max-Age=0'),
+    ])
   })
 })

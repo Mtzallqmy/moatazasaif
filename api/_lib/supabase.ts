@@ -23,6 +23,8 @@ export interface ProfileRow {
   preferences: UserPreferences
 }
 
+const OWNER_EMAILS = new Set(['mtzallqmy@gmail.com', 'moataz77549@gmail.com'])
+
 let adminClient: SupabaseClient | undefined
 
 export function getAdminClient(): SupabaseClient {
@@ -58,6 +60,38 @@ export async function getProfile(userId: string): Promise<ProfileRow> {
   return data as ProfileRow
 }
 
+/**
+ * OAuth can create an Auth user even when an older installation is missing
+ * the profile trigger. Repair only the absent row and always default to the
+ * least-privileged role; ownership is restricted to the two verified emails.
+ */
+export async function getOrCreateProfile(user: AuthUser): Promise<ProfileRow> {
+  try {
+    return await getProfile(user.id)
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.code !== 'profile_missing') throw error
+  }
+
+  const email = (user.email || '').trim().toLowerCase()
+  const metadataName = typeof user.user_metadata?.full_name === 'string'
+    ? user.user_metadata.full_name.trim()
+    : typeof user.user_metadata?.name === 'string'
+      ? user.user_metadata.name.trim()
+      : ''
+  const displayName = (metadataName || email.split('@')[0] || 'مستخدم').slice(0, 120)
+  const admin = getAdminClient()
+  const { error } = await admin.from('profiles').upsert({
+    id: user.id,
+    display_name: displayName,
+    role: OWNER_EMAILS.has(email) ? 'owner' : 'user',
+    is_active: true,
+    must_change_password: false,
+    is_internal_email: false,
+  }, { onConflict: 'id', ignoreDuplicates: true })
+  if (error) throw new ApiError(500, 'تعذر تهيئة ملف المستخدم', 'profile_create_failed')
+  return getProfile(user.id)
+}
+
 export async function authenticate(req: VercelRequest): Promise<{
   token: string
   user: AuthUser
@@ -71,7 +105,7 @@ export async function authenticate(req: VercelRequest): Promise<{
   const { data, error } = await client.auth.getUser(token)
   if (error || !data.user) throw new ApiError(401, 'جلسة الدخول غير صالحة أو منتهية', 'invalid_session')
 
-  const profile = await getProfile(data.user.id)
+  const profile = await getOrCreateProfile(data.user)
   if (!profile.is_active) throw new ApiError(403, 'تم إيقاف هذا الحساب. تواصل مع إدارة الموقع.', 'account_disabled')
 
   return { token, user: data.user, profile, client }

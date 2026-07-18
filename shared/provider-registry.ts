@@ -24,6 +24,7 @@ export const PROVIDER_DEFINITIONS = [
   { type: 'mistral', label: 'Mistral AI', defaultBaseUrl: 'https://api.mistral.ai/v1', protocol: 'openai-compatible', requiresCustomBaseUrl: false },
   { type: 'together', label: 'Together AI', defaultBaseUrl: 'https://api.together.xyz/v1', protocol: 'openai-compatible', requiresCustomBaseUrl: false },
   { type: 'nvidia', label: 'NVIDIA NIM', defaultBaseUrl: 'https://integrate.api.nvidia.com/v1', protocol: 'openai-compatible', requiresCustomBaseUrl: false },
+  { type: 'zyloo', label: 'Zyloo', defaultBaseUrl: 'https://api.zyloo.io/v1', protocol: 'openai-compatible', requiresCustomBaseUrl: false },
   { type: 'dahl', label: 'dahl.global (Kimi)', defaultBaseUrl: 'https://inference.dahl.global/v1', protocol: 'openai-compatible', requiresCustomBaseUrl: false },
   { type: 'openai-compatible', label: 'OpenAI-compatible', defaultBaseUrl: '', protocol: 'openai-compatible', requiresCustomBaseUrl: true },
   { type: 'custom', label: 'مخصص', defaultBaseUrl: '', protocol: 'openai-compatible', requiresCustomBaseUrl: true },

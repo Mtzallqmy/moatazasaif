@@ -11,6 +11,7 @@ export type ProviderHealthStatus = 'healthy' | 'degraded' | 'offline' | 'unknown
 export type ProviderCircuitState = 'closed' | 'open' | 'half_open'
 
 export interface ProviderManagerRecord extends ProviderRecord {
+  manager_schema_ready: boolean
   is_enabled: boolean
   models: string[]
   priority: number
@@ -178,6 +179,7 @@ function managerRecord(row: Record<string, unknown>): ProviderManagerRecord {
     base_url: typeof row.base_url === 'string' ? row.base_url : null,
     model: typeof row.model === 'string' ? row.model : null,
     encrypted_key: row.encrypted_key,
+    manager_schema_ready: Object.prototype.hasOwnProperty.call(row, 'availability'),
     is_enabled: row.is_enabled !== false,
     models: Array.isArray(row.models) ? row.models.filter((model): model is string => typeof model === 'string') : [],
     priority: Number(row.priority ?? 100),
@@ -280,22 +282,31 @@ export async function recordProviderOutcome(admin: SupabaseClient, providerId: s
     diagnostic: diagnostic ? redactUnknown(diagnostic) : null,
     updated_at: now,
   }
-  const { error } = await admin.from('providers').update(update).eq('id', providerId).eq('user_id', userId)
+  const persistedUpdate = current.manager_schema_ready ? update : {
+    status: update.status,
+    last_tested_at: update.last_tested_at,
+    error_message: update.error_message,
+    diagnostic: update.diagnostic,
+    updated_at: update.updated_at,
+  }
+  const { error } = await admin.from('providers').update(persistedUpdate).eq('id', providerId).eq('user_id', userId)
   if (error) logTechnicalError('[provider-manager-state-save-failed]', error, { providerId, userId })
-  const requestId = outcome.requestId || randomUUID()
-  const { error: logError } = await admin.from('provider_manager_logs').insert({
-    provider_id: providerId,
-    user_id: userId,
-    model: outcome.model || null,
-    request_id: requestId,
-    status_code: diagnostic?.httpStatus || null,
-    category: diagnostic?.category || (outcome.success ? 'success' : 'unknown'),
-    code: diagnostic?.code || (outcome.success ? 'ok' : 'provider_request_failed'),
-    message: redactText(diagnostic?.providerMessage || diagnostic?.message || (outcome.success ? 'نجح الطلب' : 'فشل الطلب')),
-    duration_ms: Math.max(0, Math.round(outcome.latencyMs)),
-    metadata: { protocol: diagnostic?.detectedProtocol, healthStatus: update.health_status, circuitState: transition.state },
-  })
-  if (logError) logTechnicalError('[provider-manager-log-save-failed]', logError, { providerId, userId })
+  if (current.manager_schema_ready) {
+    const requestId = outcome.requestId || randomUUID()
+    const { error: logError } = await admin.from('provider_manager_logs').insert({
+      provider_id: providerId,
+      user_id: userId,
+      model: outcome.model || null,
+      request_id: requestId,
+      status_code: diagnostic?.httpStatus || null,
+      category: diagnostic?.category || (outcome.success ? 'success' : 'unknown'),
+      code: diagnostic?.code || (outcome.success ? 'ok' : 'provider_request_failed'),
+      message: redactText(diagnostic?.providerMessage || diagnostic?.message || (outcome.success ? 'نجح الطلب' : 'فشل الطلب')),
+      duration_ms: Math.max(0, Math.round(outcome.latencyMs)),
+      metadata: { protocol: diagnostic?.detectedProtocol, healthStatus: update.health_status, circuitState: transition.state },
+    })
+    if (logError) logTechnicalError('[provider-manager-log-save-failed]', logError, { providerId, userId })
+  }
   return { ...current, ...update, availability, error_count: nextErrors, success_count: nextSuccess } as ProviderManagerRecord
 }
 
@@ -308,7 +319,14 @@ export async function runProviderHealthCheck(admin: SupabaseClient, userId: stri
 }
 
 export async function runScheduledProviderHealthChecks(admin: SupabaseClient, limit = 50) {
-  const { data, error } = await admin.from('providers').select('id,user_id').eq('is_enabled', true).order('last_check_at', { ascending: true, nullsFirst: true }).limit(limit)
+  const initial = await admin.from('providers').select('id,user_id').eq('is_enabled', true).order('last_check_at', { ascending: true, nullsFirst: true }).limit(limit)
+  let data = initial.data
+  let error = initial.error
+  if (error && /column|schema cache/i.test(error.message || '')) {
+    const legacy = await admin.from('providers').select('id,user_id').eq('is_enabled', true).order('created_at', { ascending: true }).limit(limit)
+    data = legacy.data
+    error = legacy.error
+  }
   if (error) throw new ApiError(500, 'تعذر تحميل قائمة فحص المزودات', 'provider_health_queue_failed')
   let healthy = 0
   let failed = 0

@@ -9,7 +9,7 @@ npm ci --no-audit --no-fund       PASS
 npm run lint                     PASS
 npm run typecheck                PASS
 npm run typecheck:api            PASS
-npm run test                     PASS — 29 ملفًا / 113 اختبارًا
+npm run test                     PASS — 29 ملفًا / 116 اختبارًا
 npm run build                    PASS
 npm audit --omit=dev             PASS — 0 ثغرات
 ```
@@ -23,6 +23,8 @@ Breaker، Retry مع Exponential Backoff، Failover قبل أول chunk، واك
 وتغطي هذه الدفعة أيضًا حدود مهلة كل مزود، وعدم إعادة محاولة الطلب الملغى، وتفضيل
 المزود السليم على مزود Offline حتى لو كانت أولوية الأخير الرقمية أعلى، ومنع Failover
 بعد إرسال أول جزء من محتوى البث حتى لا تختلط إجابتان في المحادثة نفسها.
+كما تغطي ثبات نطاق OAuth الذي بدأ تدفق PKCE، والتنظيف المستقل لملف verifier،
+وتحويل أسماء Kimi القديمة على Zyloo إلى المعرّف القانوني دون التأثير على OpenRouter.
 
 ## رحلة المستخدم
 

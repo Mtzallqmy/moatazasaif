@@ -37,6 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (body.credentialMode === 'saved' && userId) {
       const { error } = await getAdminClient().from('providers').update({
         models: diagnostic.models,
+        ...(diagnostic.testedModel ? { model: diagnostic.testedModel } : {}),
         detected_protocol: diagnostic.detectedProtocol,
         protocol: diagnostic.detectedProtocol,
         last_latency_ms: diagnostic.latencyMs,

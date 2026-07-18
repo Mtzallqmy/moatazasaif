@@ -783,10 +783,11 @@ export default function Providers() {
                     setForm({ ...form, model: event.target.value })
                   }
                   placeholder={tr(
-                    "يُستخدم إذا لم تدعم /models",
-                    "Used when /models is unavailable",
+                    form.type === "zyloo" ? "مثال: zyloo/kimi-k3" : "يُستخدم إذا لم تدعم /models",
+                    form.type === "zyloo" ? "Example: zyloo/kimi-k3" : "Used when /models is unavailable",
                   )}
                 />
+                {form.type === "zyloo" && <p className="text-xs text-dark-500 mt-2">{tr("استخدم معرّف Zyloo القانوني الذي يبدأ بـ zyloo/؛ سيتم تصحيح moonshotai/kimi-k3 القديم تلقائيًا.", "Use the canonical Zyloo ID beginning with zyloo/; the legacy moonshotai/kimi-k3 alias is corrected automatically.")}</p>}
               </div>
             </div>
             <div className="flex gap-3 mt-7">

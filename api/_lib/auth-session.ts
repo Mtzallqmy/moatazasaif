@@ -48,6 +48,10 @@ export function clearSessionCookies(res: VercelResponse) {
   appendSetCookie(res, serializeCookie(OAUTH_COOKIE, '', 0))
 }
 
+export function clearOAuthVerifierCookie(res: VercelResponse) {
+  appendSetCookie(res, serializeCookie(OAUTH_COOKIE, '', 0))
+}
+
 export function setOAuthVerifierCookie(res: VercelResponse, value: string) {
   appendSetCookie(res, serializeCookie(OAUTH_COOKIE, value, 600))
 }
@@ -91,8 +95,35 @@ export function publicAppOrigin() {
   return 'https://moatazasaif.vercel.app'
 }
 
-export function redirectToLogin(res: VercelResponse, params?: Record<string, string>) {
-  const url = new URL('/login', publicAppOrigin())
+function firstHeader(value: string | string[] | undefined) {
+  return (Array.isArray(value) ? value[0] : value)?.split(',')[0]?.trim()
+}
+
+/** Keep the PKCE verifier, callback and final session on the same host. */
+export function requestAppOrigin(req: VercelRequest) {
+  const requestedHost = firstHeader(req.headers['x-forwarded-host']) || firstHeader(req.headers.host)
+  const requestedOrigin = requestedHost ? `https://${requestedHost}` : undefined
+  const candidates = [
+    publicAppOrigin(),
+    process.env.APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+    'https://moatazasaif.vercel.app',
+  ]
+  const allowed = new Set(candidates.flatMap((candidate) => {
+    if (!candidate) return []
+    try {
+      const url = new URL(candidate)
+      return url.protocol === 'https:' ? [url.origin] : []
+    } catch {
+      return []
+    }
+  }))
+  return requestedOrigin && allowed.has(requestedOrigin) ? requestedOrigin : publicAppOrigin()
+}
+
+export function redirectToLogin(req: VercelRequest, res: VercelResponse, params?: Record<string, string>) {
+  const url = new URL('/login', requestAppOrigin(req))
   for (const [key, value] of Object.entries(params || {})) url.searchParams.set(key, value)
   return res.redirect(303, url.toString())
 }

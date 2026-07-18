@@ -31,6 +31,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const format = queryValue(req.query.format) || 'json'
       const providers = await loadManagerProviders(admin, auth.user.id, providerId)
       if (queryValue(req.query.logs) === 'true' || format === 'csv') {
+        if (!providers.length || providers.some((provider) => !provider.manager_schema_ready)) {
+          if (format === 'csv') {
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+            res.setHeader('Content-Disposition', 'attachment; filename="provider-logs.csv"')
+            return res.status(200).send('created_at,provider_id,model,status_code,category,code,message,duration_ms,request_id')
+          }
+          return res.status(200).json({ logs: [], schemaReady: false })
+        }
         let logsQuery = admin.from('provider_manager_logs').select('created_at,provider_id,model,status_code,category,code,message,duration_ms,request_id').eq('user_id', auth.user.id).order('created_at', { ascending: false }).limit(500)
         if (providerId) logsQuery = logsQuery.eq('provider_id', providerId)
         const { data: logs, error } = await logsQuery
@@ -69,7 +77,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const result = await discoverProviderModels(resolved.provider, resolved.apiKey)
       const now = new Date().toISOString()
-      const { error } = await admin.from('providers').update({ models: result.models, detected_protocol: result.protocol, protocol: result.protocol, capabilities: { models: true, chat: true, streaming: result.protocol === 'openai-compatible' || result.protocol === 'gemini' || result.protocol === 'anthropic' }, health_status: 'healthy', latency_ms: Date.now() - startedAt, last_check_at: now, updated_at: now }).eq('id', body.providerId).eq('user_id', auth.user.id)
+      const managerSchemaReady = Object.prototype.hasOwnProperty.call(resolved.provider, 'availability')
+      const managerUpdate = managerSchemaReady
+        ? { models: result.models, detected_protocol: result.protocol, protocol: result.protocol, capabilities: { models: true, chat: true, streaming: true }, health_status: 'healthy', latency_ms: Date.now() - startedAt, last_check_at: now, updated_at: now }
+        : { models: result.models, detected_protocol: result.protocol, protocol: result.protocol, updated_at: now }
+      const { error } = await admin.from('providers').update(managerUpdate).eq('id', body.providerId).eq('user_id', auth.user.id)
       if (error) logTechnicalError('[provider-models-save-failed]', error, { providerId: body.providerId, userId: auth.user.id })
       await recordProviderOutcome(admin, body.providerId, auth.user.id, {
         success: true,

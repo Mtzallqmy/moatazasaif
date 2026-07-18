@@ -151,14 +151,27 @@ export { sanitizeProviderEndpoint }
 
 function providerConfig(provider: ProviderRecord, apiKey: string): ProviderConfig {
   const protocol = inferProtocol(provider.type, provider.base_url, provider.protocol)
+  const baseUrl = providerBaseUrl(provider)
   return {
     type: provider.type,
     name: provider.name,
     protocol,
-    baseUrl: providerBaseUrl(provider),
+    baseUrl,
     apiKey,
-    model: provider.model || undefined,
+    model: provider.model ? canonicalProviderModel({ type: provider.type, base_url: baseUrl }, provider.model) : undefined,
   }
+}
+
+/** Normalize provider-specific legacy aliases without changing other gateways. */
+export function canonicalProviderModel(provider: Pick<ProviderRecord, 'type' | 'base_url'>, model: string) {
+  const value = model.trim()
+  if (!value) return value
+  let host = ''
+  try { host = new URL(providerBaseUrl(provider)).hostname.toLowerCase() } catch { return value }
+  if (provider.type !== 'zyloo' && host !== 'api.zyloo.io') return value
+  if (/^moonshotai\/(kimi-[a-z0-9.-]+)$/i.test(value)) return `zyloo/${value.split('/').pop()}`
+  if (/^kimi-[a-z0-9.-]+$/i.test(value)) return `zyloo/${value}`
+  return value
 }
 
 function adapterFor(protocol: ProviderProtocol) {
@@ -189,7 +202,7 @@ export function classifyProviderError(error: NormalizedProviderError): Pick<Prov
     return { category: 'quota', code: error.code || 'quota_exceeded', hint: 'راجع الرصيد أو الحصة وحدود الفوترة لدى المزود. بعض النماذج المجانية تتطلب تفعيل الفوترة أو حدًا أدنى من الرصيد.' }
   }
   if (status === 429) return { category: 'rate_limit', code: error.code || 'rate_limited', hint: 'تم تجاوز حد الطلبات؛ انتظر ثم أعد المحاولة.' }
-  if (status === 404 && (message.includes('model') || code.includes('model'))) return { category: 'model', code: error.code || 'model_not_found', hint: 'اختر نموذجًا موجودًا ومتاحًا لهذا المفتاح.' }
+  if ([400, 404, 422].includes(status || 0) && (message.includes('model') || code.includes('model'))) return { category: 'model', code: error.code || 'model_not_found', hint: 'اختر المعرّف القانوني من /models. في Zyloo تبدأ المعرّفات بـ zyloo/ مثل zyloo/kimi-k3.' }
   if ([404, 405].includes(status)) return { category: 'endpoint', code: error.code || 'endpoint_not_found', hint: 'تحقق من Base URL والبروتوكول؛ قد يلزم أن ينتهي الرابط بـ /v1.' }
   if ([400, 409, 422].includes(status)) return { category: 'validation', code: error.code || 'invalid_request', hint: 'رفض المزود صيغة الطلب أو اسم النموذج؛ راجع رسالته الأصلية.' }
   if (status >= 500) return { category: 'upstream', code: error.code || 'provider_error', hint: 'الخطأ صادر من خادم المزود؛ أعد المحاولة أو راجع حالة خدمته.' }
@@ -250,15 +263,17 @@ export async function testProviderConnection(provider: ProviderRecord, apiKey: s
 
 export async function generateProviderText(provider: ProviderRecord, apiKey: string, model: string, messages: ProviderChatMessage[], signal?: AbortSignal) {
   const config = providerConfig(provider, apiKey)
+  const canonicalModel = canonicalProviderModel(provider, model)
   await assertSafeProviderUrl(config.baseUrl)
-  assertMultimodalSupport(config.protocol, model, messages)
-  const result = await adapterFor(config.protocol).generateText(config, model, messages, signal)
-  return { ...result, tokens: result.usage.totalTokens }
+  assertMultimodalSupport(config.protocol, canonicalModel, messages)
+  const result = await adapterFor(config.protocol).generateText(config, canonicalModel, messages, signal)
+  return { ...result, model: canonicalModel, tokens: result.usage.totalTokens }
 }
 
 export async function* streamProviderText(provider: ProviderRecord, apiKey: string, model: string, messages: ProviderChatMessage[], signal?: AbortSignal) {
   const config = providerConfig(provider, apiKey)
+  const canonicalModel = canonicalProviderModel(provider, model)
   await assertSafeProviderUrl(config.baseUrl)
-  assertMultimodalSupport(config.protocol, model, messages)
-  yield* adapterFor(config.protocol).streamText(config, model, messages, signal)
+  assertMultimodalSupport(config.protocol, canonicalModel, messages)
+  yield* adapterFor(config.protocol).streamText(config, canonicalModel, messages, signal)
 }

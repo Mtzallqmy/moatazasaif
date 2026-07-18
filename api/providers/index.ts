@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
 import { authenticate, getAdminClient } from '../_lib/supabase.js'
 import { encryptSecret } from '../_lib/crypto.js'
 import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from '../_lib/http.js'
-import { assertSafeProviderUrl } from '../_lib/provider-runtime.js'
+import { assertSafeProviderUrl, canonicalProviderModel } from '../_lib/provider-runtime.js'
 import { enforceRateLimit } from '../_lib/rate-limit.js'
 import { parseRequest, providerCreateSchema, providerDeleteSchema, providerPatchSchema } from '../_lib/provider-schemas.js'
 import { getProviderDefinition, resolveProviderBaseUrl, resolveProviderProtocol } from '../../shared/provider-registry.js'
@@ -80,7 +80,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'PATCH') {
       const body = parseRequest(providerPatchSchema, req.body)
       const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
-      if (body.model !== undefined) update.model = body.model || null
+      if (body.model !== undefined) {
+        if (!body.model) update.model = null
+        else {
+          const { data: current, error: currentError } = await admin.from('providers').select('type,base_url').eq('id', body.id).eq('user_id', user.id).maybeSingle()
+          if (currentError) throw new ApiError(500, 'تعذر قراءة المزود', 'provider_read_failed')
+          if (!current) throw new ApiError(404, 'المزود غير موجود', 'provider_not_found')
+          update.model = canonicalProviderModel({ type: current.type, base_url: current.base_url }, body.model)
+        }
+      }
       if (body.isEnabled !== undefined) update.is_enabled = body.isEnabled
       if (body.priority !== undefined) update.priority = body.priority
       if (body.timeout !== undefined) update.timeout_ms = body.timeout
@@ -120,6 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const baseUrl = resolveProviderBaseUrl(body.type, body.baseUrl)
     await assertSafeProviderUrl(baseUrl)
     const protocol = resolveProviderProtocol(body.type, body.protocol, baseUrl)
+    const model = body.model ? canonicalProviderModel({ type: body.type, base_url: baseUrl }, body.model) : null
     const now = new Date().toISOString()
     const { data, error } = await admin.from('providers').insert({
       user_id: user.id,
@@ -127,7 +136,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       type: body.type,
       protocol,
       base_url: baseUrl,
-      model: body.model || null,
+      model,
       encrypted_key: encryptSecret(body.apiKey),
       is_enabled: true,
       status: 'untested',

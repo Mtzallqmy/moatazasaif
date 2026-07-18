@@ -104,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             content: redactText(result.content, [candidate.apiKey], Number.MAX_SAFE_INTEGER),
             usage: result.usage,
             tokens: result.usage.totalTokens,
-            model,
+            model: result.model || model,
             provider: body.credentialMode === 'platform' ? 'platform' : candidate.provider.type,
             protocol: result.protocol,
             endpoint: body.credentialMode === 'platform' ? undefined : result.endpoint ? sanitizeProviderEndpoint(result.endpoint, [candidate.apiKey]) : undefined,

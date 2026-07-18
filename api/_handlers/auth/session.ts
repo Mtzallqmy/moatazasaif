@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
-import { getPublicAuthClient, getProfile, publicUser } from '../../_lib/supabase.js'
+import { getOrCreateProfile, getPublicAuthClient, publicUser } from '../../_lib/supabase.js'
 import { ApiError, methodNotAllowed, requireString, sendError, setJsonHeaders } from '../../_lib/http.js'
 import { clearSessionCookies, readAccessToken, readRefreshToken, setSessionCookies } from '../../_lib/auth-session.js'
 
@@ -8,7 +8,7 @@ async function respondWithSession(res: VercelResponse, session: Session) {
   const auth = getPublicAuthClient()
   const { data, error } = await auth.auth.getUser(session.access_token)
   if (error || !data.user) throw new ApiError(401, 'جلسة الدخول غير صالحة أو منتهية', 'invalid_session')
-  const profile = await getProfile(data.user.id)
+  const profile = await getOrCreateProfile(data.user)
   if (!profile.is_active) throw new ApiError(403, 'تم إيقاف هذا الحساب. تواصل مع إدارة الموقع.', 'account_disabled')
   setSessionCookies(res, session)
   return res.status(200).json({ user: publicUser(data.user, profile) })

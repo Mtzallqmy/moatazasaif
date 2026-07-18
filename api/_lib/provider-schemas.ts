@@ -60,6 +60,7 @@ export const providerCreateSchema = z.object({
 
 export const providerPatchSchema = z.object({
   id: z.string().uuid(),
+  apiKey: optionalTrimmed(8_192),
   name: optionalTrimmed(80),
   model: optionalTrimmed(300).nullable().optional(),
   baseUrl: optionalUrl,
@@ -183,7 +184,7 @@ export const chatAttachmentSchema = z.discriminatedUnion('type', [
 export const chatMessageSchema = z.object({
   role: z.enum(['system', 'user', 'assistant']),
   content: z.string().trim().max(100_000),
-  attachments: z.array(chatAttachmentSchema).max(3).optional(),
+  attachments: z.array(chatAttachmentSchema).max(5).optional(),
 }).strict().superRefine((message, context) => {
   if (!message.content && !message.attachments?.length) {
     context.addIssue({ code: 'custom', path: ['content'], message: 'الرسالة أو المرفق مطلوب' })

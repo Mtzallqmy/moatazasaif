@@ -20,12 +20,24 @@ function chatBody(model: string, messages: ProviderChatMessage[], stream: boolea
   return { model, messages: openAiMessages(messages), stream, temperature: 0.7, max_tokens: getProviderRuntimeEnv().PROVIDER_MAX_OUTPUT_TOKENS }
 }
 
+function endpointCandidates(baseUrl: string, resource: string) {
+  const candidates = [`${baseUrl}/${resource}`]
+  if (!/\/v\d+(beta)?$/i.test(baseUrl)) candidates.push(`${baseUrl}/v1/${resource}`)
+  return Array.from(new Set(candidates))
+}
+
+function canTryAlternateEndpoint(error: unknown) {
+  if (!(error instanceof ProviderRequestError)) return false
+  return [404, 405].includes(error.details.status || 0)
+    || error.details.code === 'unexpected_html_response'
+    || error.details.code === 'cloudflare_challenge'
+}
+
 export const openAiCompatibleAdapter: ProviderAdapter = {
   protocol: 'openai-compatible',
 
   async listModels(config, signal) {
-    const candidates = [`${config.baseUrl}/models`]
-    if (!/\/v\d+(beta)?$/i.test(config.baseUrl)) candidates.push(`${config.baseUrl}/v1/models`)
+    const candidates = endpointCandidates(config.baseUrl, 'models')
     let lastError: unknown
     for (const endpoint of Array.from(new Set(candidates))) {
       try {
@@ -34,13 +46,7 @@ export const openAiCompatibleAdapter: ProviderAdapter = {
         return { models: extractModelIds(payload), endpoint, httpStatus: response.status }
       } catch (error) {
         lastError = error
-        const details = error instanceof ProviderRequestError ? error.details : undefined
-        const retryablePath = details && (
-          [404, 405].includes(details.status || 0) ||
-          details.code === 'unexpected_html_response' ||
-          details.code === 'cloudflare_challenge'
-        )
-        if (!retryablePath) throw error
+        if (!canTryAlternateEndpoint(error)) throw error
       }
     }
     throw lastError || new ProviderRequestError({ message: 'لم يتم العثور على بوابة اكتشاف النماذج', code: 'models_endpoint_missing', endpoint: config.baseUrl })
@@ -64,37 +70,61 @@ export const openAiCompatibleAdapter: ProviderAdapter = {
   },
 
   async generateText(config, model, messages, signal): Promise<ProviderGenerateResult> {
-    const chatEndpoint = `${config.baseUrl}/chat/completions`
-    try {
-      const response = await providerFetch(chatEndpoint, { method: 'POST', headers: headers(config), body: JSON.stringify(chatBody(model, messages, false)) }, signal)
-      const payload = await readProviderJson(response, chatEndpoint)
-      const content = payload?.choices?.[0]?.message?.content
-      if (typeof content !== 'string' || !content) throw new ProviderRequestError({ message: 'استجابة المزود لا تحتوي choices[0].message.content', code: 'invalid_chat_response', endpoint: chatEndpoint })
-      return { content, usage: usage(payload?.usage?.prompt_tokens, payload?.usage?.completion_tokens, payload?.usage?.total_tokens), protocol: this.protocol, endpoint: chatEndpoint, httpStatus: response.status }
-    } catch (error) {
-      if (!(error instanceof ProviderRequestError) || ![404, 405].includes(error.details.status || 0)) throw error
+    let lastChatError: unknown
+    for (const chatEndpoint of endpointCandidates(config.baseUrl, 'chat/completions')) {
+      try {
+        const response = await providerFetch(chatEndpoint, { method: 'POST', headers: headers(config), body: JSON.stringify(chatBody(model, messages, false)) }, signal)
+        const payload = await readProviderJson(response, chatEndpoint)
+        const content = payload?.choices?.[0]?.message?.content
+        if (typeof content !== 'string' || !content) throw new ProviderRequestError({ message: 'استجابة المزود لا تحتوي choices[0].message.content', code: 'invalid_chat_response', endpoint: chatEndpoint })
+        return { content, usage: usage(payload?.usage?.prompt_tokens, payload?.usage?.completion_tokens, payload?.usage?.total_tokens), protocol: this.protocol, endpoint: chatEndpoint, httpStatus: response.status }
+      } catch (error) {
+        lastChatError = error
+        if (!canTryAlternateEndpoint(error)) throw error
+      }
     }
 
     if (hasImageAttachments(messages)) {
       throw new ProviderRequestError({
         message: 'بوابة Chat Completions لهذا المزود لم تقبل الطلب، ولا يمكن إسقاط الصور عند الرجوع إلى Responses API.',
         code: 'provider_image_fallback_unsupported',
-        endpoint: chatEndpoint,
+        endpoint: errorEndpoint(lastChatError) || config.baseUrl,
       })
     }
-    const endpoint = `${config.baseUrl}/responses`
     const input = messages.map((message) => `${message.role.toUpperCase()}: ${messageText(message)}`).join('\n\n')
-    const response = await providerFetch(endpoint, { method: 'POST', headers: headers(config), body: JSON.stringify({ model, input, max_output_tokens: getProviderRuntimeEnv().PROVIDER_MAX_OUTPUT_TOKENS }) }, signal)
-    const payload = await readProviderJson(response, endpoint)
-    const content = payload?.output_text || payload?.output?.flatMap?.((item: any) => item?.content || []).map((item: any) => item?.text || '').join('') || ''
-    if (!content) throw new ProviderRequestError({ message: 'بوابة responses أعادت استجابة دون نص', code: 'invalid_responses_response', endpoint })
-    return { content, usage: usage(payload?.usage?.input_tokens, payload?.usage?.output_tokens, payload?.usage?.total_tokens), protocol: this.protocol, endpoint, httpStatus: response.status }
+    let lastError: unknown = lastChatError
+    for (const endpoint of endpointCandidates(config.baseUrl, 'responses')) {
+      try {
+        const response = await providerFetch(endpoint, { method: 'POST', headers: headers(config), body: JSON.stringify({ model, input, max_output_tokens: getProviderRuntimeEnv().PROVIDER_MAX_OUTPUT_TOKENS }) }, signal)
+        const payload = await readProviderJson(response, endpoint)
+        const content = payload?.output_text || payload?.output?.flatMap?.((item: any) => item?.content || []).map((item: any) => item?.text || '').join('') || ''
+        if (!content) throw new ProviderRequestError({ message: 'بوابة responses أعادت استجابة دون نص', code: 'invalid_responses_response', endpoint })
+        return { content, usage: usage(payload?.usage?.input_tokens, payload?.usage?.output_tokens, payload?.usage?.total_tokens), protocol: this.protocol, endpoint, httpStatus: response.status }
+      } catch (error) {
+        lastError = error
+        if (!canTryAlternateEndpoint(error)) throw error
+      }
+    }
+    throw lastError || new ProviderRequestError({ message: 'لم يتم العثور على endpoint توليد متوافق', code: 'generation_endpoint_missing', endpoint: config.baseUrl })
   },
 
   async *streamText(config, model, messages, signal): AsyncGenerator<ProviderStreamEvent> {
-    const endpoint = `${config.baseUrl}/chat/completions`
-    const response = await providerFetch(endpoint, { method: 'POST', headers: headers(config), body: JSON.stringify({ ...chatBody(model, messages, true), stream_options: { include_usage: true } }) }, signal)
-    if (!response.ok) await readProviderJson(response, endpoint)
+    let endpoint = ''
+    let response: Response | undefined
+    let lastError: unknown
+    for (const candidate of endpointCandidates(config.baseUrl, 'chat/completions')) {
+      try {
+        const candidateResponse = await providerFetch(candidate, { method: 'POST', headers: headers(config), body: JSON.stringify({ ...chatBody(model, messages, true), stream_options: { include_usage: true } }) }, signal)
+        if (!candidateResponse.ok) await readProviderJson(candidateResponse, candidate)
+        endpoint = candidate
+        response = candidateResponse
+        break
+      } catch (error) {
+        lastError = error
+        if (!canTryAlternateEndpoint(error)) throw error
+      }
+    }
+    if (!response) throw lastError || new ProviderRequestError({ message: 'لم يتم العثور على endpoint بث متوافق', code: 'stream_endpoint_missing', endpoint: config.baseUrl })
     yield { event: 'meta', data: { model, provider: config.type, protocol: this.protocol, endpoint } }
     let finalUsage = emptyUsage()
     for await (const message of parseSseStream(response, endpoint)) {
@@ -112,4 +142,8 @@ export const openAiCompatibleAdapter: ProviderAdapter = {
   },
 
   normalizeError(error) { return normalizeProviderError(error, this.protocol) },
+}
+
+function errorEndpoint(error: unknown) {
+  return error instanceof ProviderRequestError ? error.details.endpoint : undefined
 }

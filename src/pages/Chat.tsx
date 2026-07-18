@@ -61,31 +61,28 @@ import {
   listLocalMessages,
   updateLocalChat,
 } from "../lib/local-chat-store";
+import { deleteChatFile, uploadChatAttachments } from "../lib/files-api";
+import AiMessageContent from "../components/chat/AiMessageContent";
+import type { CodeArtifact } from "../lib/code-artifacts";
+import { createProject, importProjectArtifacts } from "../lib/projects-api";
+import {
+  CHAT_FILE_MIME_TYPES,
+  MAX_CHAT_FILE_BYTES,
+  MAX_CHAT_FILES_PER_MESSAGE,
+  fileMimeType,
+} from "../../shared/file-contract";
 
 type ActiveProvider = Provider | SessionProviderCredential;
 
-const MAX_ATTACHMENT_COUNT = 3;
-const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+const MAX_ATTACHMENT_COUNT = MAX_CHAT_FILES_PER_MESSAGE;
+const MAX_ATTACHMENT_BYTES = MAX_CHAT_FILE_BYTES;
 const ATTACHMENT_ACCEPT =
-  "image/png,image/jpeg,image/webp,text/plain,text/markdown,application/json,.txt,.md,.markdown,.json";
-const ALLOWED_ATTACHMENT_TYPES = new Set<ChatAttachmentMimeType>([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "text/plain",
-  "text/markdown",
-  "application/json",
-]);
+  ".png,.jpg,.jpeg,.webp,.txt,.md,.markdown,.json,.csv,.tsv,.xml,.yaml,.yml,.sql,.js,.mjs,.cjs,.jsx,.ts,.tsx,.mts,.cts,.py,.html,.htm,.css,.sh,.bash";
+const ALLOWED_ATTACHMENT_TYPES = new Set<ChatAttachmentMimeType>(CHAT_FILE_MIME_TYPES);
 
 function attachmentType(file: File): ChatAttachmentMimeType | null {
-  if (ALLOWED_ATTACHMENT_TYPES.has(file.type as ChatAttachmentMimeType)) {
-    return file.type as ChatAttachmentMimeType;
-  }
-  const extension = file.name.toLowerCase().split(".").pop();
-  if (extension === "txt") return "text/plain";
-  if (extension === "md" || extension === "markdown") return "text/markdown";
-  if (extension === "json") return "application/json";
-  return null;
+  const detected = fileMimeType(file.name, file.type);
+  return detected && ALLOWED_ATTACHMENT_TYPES.has(detected) ? detected : null;
 }
 
 function matchesImageSignature(
@@ -483,26 +480,32 @@ export default function Chat() {
     const content =
       input.trim() || tr("حلّل المرفقات", "Review the attached files");
     const submittedAttachments = attachments;
-    setInput("");
-    setAttachments([]);
     setIsStreaming(true);
     setStreamingContent("");
-    const userMessage: Message = {
-      id: generateId(),
-      chatId: currentChat.id,
-      role: "user",
-      content,
-      attachments: submittedAttachments.length
-        ? submittedAttachments
-        : undefined,
-      createdAt: new Date().toISOString(),
-    };
-    const nextMessages = [...messages, userMessage];
-    setMessages(nextMessages);
     const isSession = credentialMode === "session";
+    const messageId = generateId();
+    let uploadedFileIds: string[] = [];
+    let messageSaved = false;
     try {
+      const persistedAttachments = !isSession && submittedAttachments.length
+        ? await uploadChatAttachments(currentChat.id, messageId, submittedAttachments)
+        : submittedAttachments;
+      uploadedFileIds = persistedAttachments.flatMap((attachment) => "fileId" in attachment && attachment.fileId ? [attachment.fileId] : []);
+      const userMessage: Message = {
+        id: messageId,
+        chatId: currentChat.id,
+        role: "user",
+        content,
+        attachments: persistedAttachments.length ? persistedAttachments : undefined,
+        createdAt: new Date().toISOString(),
+      };
+      const nextMessages = [...messages, userMessage];
+      setInput("");
+      setAttachments([]);
+      setMessages(nextMessages);
       if (isSession) await insertLocalMessage(userMessage);
       else if (user) await insertMessage(userMessage, user.id);
+      messageSaved = true;
       let chat = currentChat;
       if (messages.length === 0) {
         if (isSession)
@@ -584,6 +587,9 @@ export default function Chat() {
           .catch(() => undefined);
       }
     } catch (error) {
+      if (!messageSaved && uploadedFileIds.length) {
+        await Promise.allSettled(uploadedFileIds.map((fileId) => deleteChatFile(fileId)));
+      }
       if (!(error instanceof DOMException && error.name === "AbortError"))
         toast.error(
           error instanceof Error
@@ -619,6 +625,25 @@ export default function Chat() {
           ? error.message
           : tr("تعذر مسح بيانات الجلسة", "Could not clear session data"),
       );
+    }
+  };
+
+  const saveArtifactsAsProject = async (artifacts: CodeArtifact[]) => {
+    if (!user) {
+      toast.error(tr("سجّل الدخول لحفظ مشروع", "Sign in to save a project"));
+      return;
+    }
+    try {
+      const project = await createProject({
+        name: (currentChat?.title || tr("مشروع من الدردشة", "Project from chat")).slice(0, 100),
+        description: tr("ملفات مستخرجة من إحدى إجابات الدردشة", "Files extracted from a chat response"),
+        template: "empty",
+      });
+      await importProjectArtifacts(project.id, artifacts.map(({ path, content, mimeType }) => ({ path, content, mimeType })));
+      toast.success(tr("تم إنشاء المشروع وحفظ الملفات", "Project and files saved"));
+      navigate(`/projects/${project.id}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : tr("تعذر حفظ المشروع", "Could not save project"));
     }
   };
 
@@ -1041,13 +1066,11 @@ export default function Chat() {
                   isUser={message.role === "user"}
                   tr={tr}
                 />
-                <div
-                  className={`prose prose-sm max-w-none ${message.role === "user" ? "prose-invert" : "dark:prose-invert"}`}
-                >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {message.content}
-                  </ReactMarkdown>
-                </div>
+                {message.role === "assistant" ? (
+                  <AiMessageContent content={message.content} canSaveProject={Boolean(user)} onSaveProject={(items) => void saveArtifactsAsProject(items)} />
+                ) : (
+                  <div className="prose prose-sm max-w-none prose-invert"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>
+                )}
                 {message.tokens ? (
                   <div className="text-[10px] text-dark-500 mt-2">
                     {message.tokens} {tr("رمز", "tokens")}
@@ -1222,8 +1245,8 @@ export default function Chat() {
           </div>
           <div className="text-[10px] text-dark-500 mt-2 text-center">
             {tr(
-              "PNG، JPEG، WebP، TXT، Markdown، JSON • Enter للإرسال",
-              "PNG, JPEG, WebP, TXT, Markdown, JSON • Press Enter to send",
+              "صور وملفات نصية وبرمجية حتى 5 ملفات • Enter للإرسال",
+              "Images, text, and code files — up to 5 • Press Enter to send",
             )}
           </div>
         </div>
@@ -1253,9 +1276,9 @@ function MessageAttachments({
             key={`${name}-${index}`}
             className={`min-w-0 rounded-xl border overflow-hidden ${isUser ? "bg-white/10 border-white/20" : "bg-dark-50 dark:bg-dark-900 border-dark-200 dark:border-dark-700"}`}
           >
-            {hasPreview ? (
+            {hasPreview || (attachment.type === "image" && "downloadUrl" in attachment && attachment.downloadUrl) ? (
               <img
-                src={attachment.dataUrl}
+                src={hasPreview ? attachment.dataUrl : ("downloadUrl" in attachment ? attachment.downloadUrl : undefined)}
                 alt={name}
                 className="w-full h-32 object-cover"
                 loading="lazy"
@@ -1268,6 +1291,9 @@ function MessageAttachments({
                 <FileText size={15} className="shrink-0" aria-hidden="true" />
               )}
               <span className="text-xs truncate flex-1">{name}</span>
+              {"downloadUrl" in attachment && attachment.downloadUrl ? (
+                <a href={`${attachment.downloadUrl}?download=1`} className="text-[10px] underline shrink-0" download>{tr("تنزيل", "Download")}</a>
+              ) : null}
               {attachment.size !== undefined ? (
                 <span className="text-[10px] opacity-70 shrink-0">
                   {formatAttachmentSize(attachment.size)}

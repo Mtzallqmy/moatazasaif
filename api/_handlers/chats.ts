@@ -2,6 +2,8 @@ import { z } from 'zod'
 import type { VercelRequest, VercelResponse } from '../_lib/vercel.js'
 import { authenticate, getAdminClient } from '../_lib/supabase.js'
 import { ApiError, methodNotAllowed, optionalString, requireString, sendError, setJsonHeaders } from '../_lib/http.js'
+import { CHAT_FILE_MIME_TYPES, MAX_CHAT_FILES_PER_MESSAGE } from '../../shared/file-contract.js'
+import { CHAT_FILE_BUCKET, publicChatFile } from '../_lib/chat-files.js'
 
 const chatIdSchema = z.string().uuid()
 const roleSchema = z.enum(['user', 'assistant', 'system', 'tool'])
@@ -14,10 +16,12 @@ const messageSchema = z.object({
   tokens: z.number().int().nonnegative().max(10_000_000).optional(),
   attachments: z.array(z.object({
     type: z.enum(['image', 'text']),
-    mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'text/plain', 'text/markdown', 'application/json']),
+    mimeType: z.enum(CHAT_FILE_MIME_TYPES),
+    fileId: z.string().uuid().optional(),
+    downloadUrl: z.string().max(500).optional(),
     name: z.string().max(255).optional(),
-    size: z.number().int().nonnegative().max(10_000_000).optional(),
-  })).max(8).optional(),
+    size: z.number().int().nonnegative().max(3 * 1024 * 1024).optional(),
+  })).max(MAX_CHAT_FILES_PER_MESSAGE).optional(),
 })
 
 function mapChat(row: Record<string, unknown>) {
@@ -101,7 +105,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (parts.length === 2 && parts[1] === 'messages' && req.method === 'POST') {
       const message = messageSchema.parse(req.body)
-      const { data, error } = await admin.from('messages').insert({ id: message.id, chat_id: chatId, user_id: auth.user.id, role: message.role, content: message.content, attachments: message.attachments || null, model: message.model || null, tokens: message.tokens || null }).select('*').single()
+      let safeAttachments: Array<Record<string, unknown>> | undefined = message.attachments?.map(({ downloadUrl: _downloadUrl, ...attachment }) => attachment)
+      const fileIds = message.attachments?.flatMap((attachment) => attachment.fileId ? [attachment.fileId] : []) || []
+      if (fileIds.length) {
+        if (fileIds.length !== message.attachments?.length) throw new ApiError(400, 'مرفقات الرسالة غير مكتملة', 'message_files_incomplete')
+        const { data: files, error: filesError } = await admin.from('chat_files').select('*').in('id', fileIds).eq('user_id', auth.user.id).eq('chat_id', chatId).eq('message_id', message.id)
+        if (filesError) throw new ApiError(500, 'تعذر التحقق من مرفقات الرسالة', 'message_files_lookup_failed')
+        if ((files || []).length !== fileIds.length) throw new ApiError(400, 'أحد المرفقات غير صالح أو لا تملكه', 'message_file_not_owned')
+        const indexed = new Map((files || []).map((file) => [String(file.id), file as Record<string, unknown>]))
+        safeAttachments = fileIds.map((id) => publicChatFile(indexed.get(id)!))
+      }
+      const { data, error } = await admin.from('messages').insert({ id: message.id, chat_id: chatId, user_id: auth.user.id, role: message.role, content: message.content, attachments: safeAttachments || null, model: message.model || null, tokens: message.tokens || null }).select('*').single()
       if (error || !data) throw new ApiError(error?.code === '23505' ? 409 : 500, error?.code === '23505' ? 'الرسالة موجودة مسبقًا' : 'تعذر حفظ الرسالة', error?.code === '23505' ? 'message_duplicate' : 'message_insert_failed')
       await admin.from('chats').update({ message_count: Number(chat.message_count || 0) + 1, updated_at: new Date().toISOString() }).eq('id', chatId).eq('user_id', auth.user.id)
       return res.status(201).json({ message: mapMessage(data as Record<string, unknown>) })
@@ -129,6 +143,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (parts.length === 1 && req.method === 'DELETE') {
+      const { data: storedFiles, error: filesError } = await admin.from('chat_files').select('storage_path').eq('chat_id', chatId).eq('user_id', auth.user.id)
+      if (filesError) throw new ApiError(500, 'تعذر قراءة ملفات المحادثة', 'chat_files_read_failed')
+      const paths = (storedFiles || []).map((file) => String(file.storage_path))
+      if (paths.length) {
+        const { error: removeError } = await admin.storage.from(CHAT_FILE_BUCKET).remove(paths)
+        if (removeError) throw new ApiError(502, 'تعذر حذف ملفات المحادثة الخاصة', 'chat_files_delete_failed')
+      }
       const { error } = await admin.from('chats').delete().eq('id', chatId).eq('user_id', auth.user.id)
       if (error) throw new ApiError(500, 'تعذر حذف المحادثة', 'chat_delete_failed')
       return res.status(204).send('')

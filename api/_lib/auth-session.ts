@@ -7,6 +7,8 @@ const REFRESH_COOKIE = 'moataz-refresh-token'
 const OAUTH_COOKIE = 'moataz-oauth-verifier'
 const ACCESS_MAX_AGE = 60 * 60
 const REFRESH_MAX_AGE = 60 * 60 * 24 * 30
+const CANONICAL_APP_URL = 'https://moatazalalqami.online'
+const KNOWN_APP_ORIGINS = [CANONICAL_APP_URL, 'https://www.moatazalalqami.online', 'https://moatazasaif.vercel.app'] as const
 
 function productionCookies() {
   return process.env.NODE_ENV === 'production'
@@ -82,7 +84,7 @@ export function publicAppOrigin() {
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : undefined
-  const candidates = [configured, vercel, 'https://moatazasaif.vercel.app']
+  const candidates = [configured, vercel, ...KNOWN_APP_ORIGINS]
   for (const candidate of candidates) {
     if (!candidate) continue
     try {
@@ -92,7 +94,7 @@ export function publicAppOrigin() {
       // Ignore malformed environment values and keep the safe production fallback.
     }
   }
-  return 'https://moatazasaif.vercel.app'
+  return CANONICAL_APP_URL
 }
 
 function firstHeader(value: string | string[] | undefined) {
@@ -108,7 +110,7 @@ export function requestAppOrigin(req: VercelRequest) {
     process.env.APP_URL,
     process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined,
     process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
-    'https://moatazasaif.vercel.app',
+    ...KNOWN_APP_ORIGINS,
   ]
   const allowed = new Set(candidates.flatMap((candidate) => {
     if (!candidate) return []

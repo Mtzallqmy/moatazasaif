@@ -1,8 +1,4 @@
-// The Vercel alias is the only verified origin that currently serves the
-// Vercel Functions. Switch this value to the custom domain after that domain is
-// attached to this same Vercel project; never infer an API origin from a
-// separate static/Sites deployment.
-export const PRODUCTION_APP_URL = 'https://moatazasaif.vercel.app'
+export const PRODUCTION_APP_URL = 'https://moatazalalqami.online'
 
 function getPublicHttpsOrigin(value: string | undefined) {
   if (!value) return null
@@ -25,14 +21,16 @@ function getPublicHttpsOrigin(value: string | undefined) {
  * to the explicitly configured public URL, then to the production domain.
  */
 export function resolveAuthRedirectUrl(configured: string | undefined, currentOrigin: string, productionUrl = PRODUCTION_APP_URL) {
+  const browserOrigin = getPublicHttpsOrigin(currentOrigin)
+  if (browserOrigin) return `${browserOrigin}/login`
+
   const configuredOrigin = getPublicHttpsOrigin(configured)
   if (configuredOrigin) return `${configuredOrigin}/login`
 
   const productionOrigin = getPublicHttpsOrigin(productionUrl) || PRODUCTION_APP_URL
   if (productionOrigin) return `${productionOrigin}/login`
 
-  const browserOrigin = getPublicHttpsOrigin(currentOrigin)
-  return `${browserOrigin || PRODUCTION_APP_URL}/login`
+  return `${PRODUCTION_APP_URL}/login`
 }
 
 export function getAuthRedirectUrl() {

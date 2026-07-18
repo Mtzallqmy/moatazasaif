@@ -126,7 +126,7 @@ export function getTelegramWebhookUrl() {
       return false
     }
   }
-  const appUrl = [configured, vercelProduction, 'https://moatazasaif.vercel.app'].find(isSafePublicHttps) || 'https://moatazasaif.vercel.app'
+  const appUrl = [configured, vercelProduction, 'https://moatazalalqami.online'].find(isSafePublicHttps) || 'https://moatazalalqami.online'
   const url = new URL('/api/integrations/telegram/webhook', appUrl)
   if (url.protocol !== 'https:') throw new Error('APP_URL يجب أن يستخدم HTTPS لتسجيل Telegram Webhook')
   return url.toString()

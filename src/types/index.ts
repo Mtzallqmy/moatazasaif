@@ -4,6 +4,11 @@ import type {
 } from "../../shared/provider-registry";
 import type { CredentialMode } from "../../shared/credential-mode";
 import type { UserPreferences } from "../../shared/user-preferences";
+import type {
+  ChatFileMimeType,
+  ChatImageMimeType,
+  ChatTextMimeType,
+} from "../../shared/file-contract";
 
 export type { CredentialMode, ProviderProtocol, ProviderType };
 export type AppRole = "owner" | "admin" | "manager" | "editor" | "user";
@@ -130,39 +135,13 @@ export interface Message {
   isStreaming?: boolean;
 }
 
-export type ChatAttachmentMimeType =
-  | "image/png"
-  | "image/jpeg"
-  | "image/webp"
-  | "text/plain"
-  | "text/markdown"
-  | "application/json"
-  | "text/csv"
-  | "text/tab-separated-values"
-  | "application/xml"
-  | "text/xml"
-  | "application/yaml"
-  | "text/yaml"
-  | "application/x-yaml"
-  | "application/sql"
-  | "text/javascript"
-  | "application/javascript"
-  | "text/typescript"
-  | "application/typescript"
-  | "text/x-python"
-  | "text/html"
-  | "text/css"
-  | "text/x-shellscript";
-
-export type ChatTextAttachmentMimeType = Exclude<
-  ChatAttachmentMimeType,
-  "image/png" | "image/jpeg" | "image/webp"
->;
+export type ChatAttachmentMimeType = ChatFileMimeType;
+export type ChatTextAttachmentMimeType = ChatTextMimeType;
 
 export type ChatAttachment =
   | {
       type: "image";
-      mimeType: Extract<ChatAttachmentMimeType, `image/${string}`>;
+      mimeType: ChatImageMimeType;
       dataUrl: string;
       name?: string;
       size?: number;
@@ -178,6 +157,8 @@ export type ChatAttachment =
 export type ChatAttachmentMetadata = {
   type: "image" | "text";
   mimeType: ChatAttachmentMimeType;
+  fileId?: string;
+  downloadUrl?: string;
   name?: string;
   size?: number;
 };
@@ -216,9 +197,22 @@ export interface Integration {
 export interface Project {
   id: string;
   name: string;
-  description?: string;
+  description: string;
+  template: "empty" | "vite-react" | "node-api" | "python";
+  status: "active" | "archived";
   createdAt: string;
-  chatCount: number;
+  updatedAt: string;
+  fileCount: number;
+}
+
+export interface ProjectFile {
+  id: string;
+  projectId: string;
+  path: string;
+  content: string;
+  mimeType: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type ArticleStatus = "draft" | "published" | "archived";

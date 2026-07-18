@@ -54,7 +54,7 @@ BOOTSTRAP_TOKEN=رمز-عشوائي-طويل-جداً
 - `GET /api/health` يجب أن يعيد `status: ok`.
 - `GET /api/ready` يجب أن يعيد `status: ready` و`rateLimit: ready`.
 - `GET https://bsmzknhkzepaqeffrfbc.supabase.co/auth/v1/settings` مع المفتاح العام يجب أن يعيد `external.google: true` و`external.github: true` قبل اختبار زري OAuth.
-- اختبر Google وGitHub من `https://moatazasaif.vercel.app/login` وتأكد أن الرجوع النهائي يبقى على نطاق Vercel وأن `/api/auth/me` يعيد ملف المستخدم.
+- اختبر Google وGitHub من النطاق الأساسي و`www` و`https://moatazasaif.vercel.app/login`، وتأكد أن كل تدفق يعود إلى المضيف نفسه وأن `/api/auth/session` يعيد ملف المستخدم.
 - أنشئ مستخدمًا تجريبيًا من لوحة الإدارة وسجّل الدخول باسم المستخدم.
 - أضف مفتاح مزود تملكه، نفّذ «اختبار واكتشاف»، ثم أرسل رسالة حقيقية.
 - راجع أن رسالة الخطأ المعروضة هي رسالة المزود وتصنيفها، وليست نجاحًا وهميًا.

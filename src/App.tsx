@@ -30,6 +30,7 @@ const Blog = lazy(() => import('./pages/Blog'))
 const BlogArticle = lazy(() => import('./pages/BlogArticle'))
 const ContentManager = lazy(() => import('./pages/ContentManager'))
 const AdminSiteSettings = lazy(() => import('./pages/AdminSiteSettings'))
+const Projects = lazy(() => import('./pages/Projects'))
 
 function PageFallback() {
   const { t } = usePreferences()
@@ -97,6 +98,8 @@ export default function App() {
     <Route path="/chat" element={<AppLayout><Chat /></AppLayout>} />
     <Route path="/chat/:chatId" element={<AppLayout><Chat /></AppLayout>} />
     <Route path="/providers" element={<AppLayout><Providers /></AppLayout>} />
+    <Route path="/projects" element={protectedPage(<Projects />)} />
+    <Route path="/projects/:projectId" element={protectedPage(<Projects />)} />
     <Route path="/developer/diagnostics" element={protectedPage(<RoleRoute roles={['owner', 'admin', 'manager']}><DeveloperDiagnostics /></RoleRoute>)} />
     <Route path="/integrations" element={protectedPage(<RoleRoute roles={INTEGRATION_ROLES}><Integrations /></RoleRoute>)} />
     <Route path="/settings" element={protectedPage(<Settings />)} />

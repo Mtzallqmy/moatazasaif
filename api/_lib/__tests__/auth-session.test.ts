@@ -46,11 +46,13 @@ describe('secure auth cookies', () => {
     expect((headers.get('set-cookie') as string[]).every((value) => value.includes('Max-Age=0'))).toBe(true)
   })
 
-  it('keeps OAuth callbacks on the Vercel host that started the flow', () => {
+  it('keeps OAuth callbacks on every explicitly known production host that started the flow', () => {
     vi.stubEnv('APP_URL', 'https://moatazalalqami.online')
     vi.stubEnv('VERCEL_PROJECT_PRODUCTION_URL', 'moatazasaif.vercel.app')
     const request = { headers: { host: 'moatazasaif.vercel.app' } } as any
     expect(requestAppOrigin(request)).toBe('https://moatazasaif.vercel.app')
+    expect(requestAppOrigin({ headers: { host: 'moatazalalqami.online' } } as any)).toBe('https://moatazalalqami.online')
+    expect(requestAppOrigin({ headers: { host: 'www.moatazalalqami.online' } } as any)).toBe('https://www.moatazalalqami.online')
   })
 
   it('clears the short-lived OAuth verifier independently', () => {

@@ -5,6 +5,8 @@
 ## ما يعمل فعليًا
 
 - تسجيل الدخول بالبريد أو اسم المستخدم وكلمة المرور.
+- جلسات حساب آمنة: access/refresh cookies من نوع HttpOnly وSecure في الإنتاج، مع بقاء جلسة Supabase في ذاكرة المتصفح فقط.
+- تسجيل دخول Google وGitHub عبر OAuth PKCE؛ يتم تبادل authorization code داخل Vercel Function ولا توضع رموز المزود في عنوان المتصفح.
 - ملف `profiles` آمن كمصدر رسمي للأدوار: `owner`, `admin`, `supervisor`, `user`.
 - لوحة إدارة للمستخدمين: إنشاء، تفعيل/إيقاف، تغيير الدور، إعادة تعيين كلمة مرور مؤقتة، وحذف بواسطة المالك.
 - إنشاء حساب باسم مستخدم فقط عبر بريد داخلي لا يظهر للمستخدم.
@@ -136,7 +138,7 @@ npm run check
 
 ### الدخول عبر Google وGitHub
 
-تظهر أزرار Google وGitHub في صفحتي الدخول والتسجيل، وتستخدمان نفس عنوان الإنتاج `https://moatazasaif.vercel.app/login`. تفعيلهما يحتاج إعدادًا واحدًا في Supabase Dashboard، ولا يحتاج أي سر جديد في Vercel:
+تظهر أزرار Google وGitHub في صفحتي الدخول والتسجيل. يبدأ الزر من `/api/auth/oauth-start`، ويبادل الخادم كود OAuth عبر PKCE ثم يضع جلسة HttpOnly في cookies قبل إعادة المستخدم إلى `/login`. لا يحتاج هذا التدفق أي Client Secret في Vercel؛ مفاتيح OAuth تُحفظ في Supabase فقط:
 
 1. من **Authentication → Providers** فعّل Google و/أو GitHub وأدخل Client ID وClient Secret.
 2. في Google Cloud Console وGitHub OAuth App استخدم عنوان callback الخاص بمشروع Supabase:
@@ -145,6 +147,12 @@ npm run check
 4. اطلب تسجيلًا جديدًا بعد التغيير؛ الروابط القديمة التي تحتوي `localhost` لا تتغير بأثر رجعي.
 
 تتحقق الواجهة من حالة المزوّد قبل مغادرة الموقع، لذلك لن تعرض صفحة JSON الخام عند تعطيله. إذا ظهر تنبيه أن المزوّد غير مفعّل، أكمل بيانات OAuth في Supabase أولًا.
+
+### جلسة cookies وإعادة التوجيه
+
+- `POST /api/auth/login` و`POST /api/auth/register` يضعان cookies باسم `__Host-moataz-access-token` و`__Host-moataz-refresh-token` في الإنتاج، مع `Secure; HttpOnly; SameSite=Lax; Path=/`.
+- `GET /api/auth/session` يستعيد الجلسة ويجددها عند الحاجة، و`DELETE /api/auth/session` يمسحها. لا تحفظ الواجهة الجلسة في `localStorage`؛ لا يُستخدم `sessionStorage` إلا لمتحقق PKCE القصير.
+- التوجيه الإنتاجي لا يثق بـ preview أو localhost. استخدم `VITE_APP_URL` و`APP_URL` على الأصل الذي يخدم Functions فعلًا. النطاق `www.moatazalalqami.online` الحالي نسخة Sites منفصلة لا تحتوي `/api`; لا تضعه في `APP_URL` حتى تُربطه بنفس مشروع Vercel.
 
 ### نشر Vercel
 

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '../../_lib/vercel.js'
 import { ApiError, methodNotAllowed, normalizeEmail, requireString, sendError, setJsonHeaders } from '../../_lib/http.js'
 import { getAdminClient, getProfile, getPublicAuthClient, publicUser } from '../../_lib/supabase.js'
 import { enforceAuthRateLimit } from '../../_lib/rate-limit.js'
+import { setSessionCookies } from '../../_lib/auth-session.js'
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -49,13 +50,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await admin.from('profiles').update({ last_login_at: new Date().toISOString() }).eq('id', data.user.id)
 
+    setSessionCookies(res, data.session)
     return res.status(200).json({
-      session: {
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-        expires_in: data.session.expires_in,
-        expires_at: data.session.expires_at,
-      },
       user: publicUser(data.user, { ...profile, last_login_at: new Date().toISOString() }),
     })
   } catch (error) {

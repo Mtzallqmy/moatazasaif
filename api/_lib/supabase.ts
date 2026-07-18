@@ -3,6 +3,7 @@ import type { VercelRequest } from './vercel.js'
 import { ApiError, getBearerToken } from './http.js'
 import { getServerEnv } from './env.js'
 import { normalizeUserPreferences, type UserPreferences } from '../../shared/user-preferences.js'
+import { readAccessToken } from './auth-session.js'
 
 export type AppRole = 'owner' | 'admin' | 'manager' | 'editor' | 'user'
 
@@ -63,7 +64,7 @@ export async function authenticate(req: VercelRequest): Promise<{
   profile: ProfileRow
   client: SupabaseClient
 }> {
-  const token = getBearerToken(req)
+  const token = getBearerToken(req) || readAccessToken(req)
   if (!token) throw new ApiError(401, 'يجب تسجيل الدخول أولاً', 'authentication_required')
 
   const client = getUserClient(token)

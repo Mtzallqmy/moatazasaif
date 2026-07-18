@@ -1,21 +1,6 @@
-import { supabase } from './supabase'
-
 export async function authHeaders(json = true) {
   const headers: Record<string, string> = {}
   if (json) headers['Content-Type'] = 'application/json'
-  
-  try {
-    if (supabase) {
-      const { data } = await supabase.auth.getSession()
-      if (data?.session?.access_token) {
-        headers['Authorization'] = `Bearer ${data.session.access_token}`
-      }
-    }
-  } catch {
-    // In guest/session mode there may be no Supabase session. Do not log
-    // auth errors because SDK errors can include request metadata.
-  }
-  
   return headers
 }
 
@@ -26,8 +11,13 @@ export async function apiJson<T>(url: string, init: RequestInit = {}): Promise<T
   const controller = init.signal ? undefined : new AbortController()
   const timeout = controller ? window.setTimeout(() => controller.abort(), 30_000) : undefined
   let response: Response
+  const request = () => fetch(url, { ...init, credentials: 'same-origin', headers, signal: init.signal || controller?.signal })
   try {
-    response = await fetch(url, { ...init, headers, signal: init.signal || controller?.signal })
+    response = await request()
+    if (response.status === 401 && url !== '/api/auth/session' && !headers.has('Authorization')) {
+      const refreshed = await fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null)
+      if (refreshed?.ok) response = await request()
+    }
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw new Error(document.documentElement.lang === 'en' ? 'The request timed out. Please try again.' : 'انتهت مهلة الطلب. أعد المحاولة.')
     throw error

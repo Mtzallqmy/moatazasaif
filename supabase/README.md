@@ -5,7 +5,7 @@
 3. نفّذ migration `migrations/20260714203349_telegram_integrations.sql` لتكامل Telegram؛ جداولها Server-only ولا تمنح المتصفح أي صلاحيات.
 4. أضف متغيرات البيئة الموجودة في `.env.example` إلى Vercel، خصوصًا `APP_URL=https://moatazasaif.vercel.app` وقيم Telegram الزمنية. إذا كان `APP_URL` مفقودًا يستخدم الخادم alias الإنتاجي كحل احتياطي، لكن يفضّل ضبطه صراحةً.
 5. من Supabase Dashboard → Authentication → URL Configuration اضبط Site URL على `https://moatazasaif.vercel.app` وأضف Redirect URL `https://moatazasaif.vercel.app/login`. راجع قالب Magic Link وتأكد أنه يستخدم `{{ .ConfirmationURL }}` أو `{{ .RedirectTo }}`، وليس localhost ثابتًا.
-6. لتفعيل الدخول الاجتماعي: من Authentication → Providers فعّل Google وGitHub، وضع بيانات OAuth الخاصة بهما. عنوان callback في Google/GitHub هو `https://<project-ref>.supabase.co/auth/v1/callback`، بينما Redirect URL الذي تضيفه في Supabase هو `https://moatazasaif.vercel.app/login`.
+6. لتفعيل الدخول الاجتماعي: من Authentication → Providers فعّل Google وGitHub، وضع بيانات OAuth الخاصة بهما. عنوان callback في Google/GitHub هو `https://<project-ref>.supabase.co/auth/v1/callback`. الخادم يعيد المستخدم من PKCE إلى `https://moatazasaif.vercel.app/api/auth/oauth-callback` ثم إلى `/login`؛ اسمح بهذا العنوان وبعنوان `/login` في Redirect URLs.
 7. للتهيئة الرسمية لأول مالك:
    - اضبط `BOOTSTRAP_TOKEN` بقيمة عشوائية طويلة.
    - اضبط `BOOTSTRAP_OWNER_EMAIL=mtzallqmy@gmail.com`.

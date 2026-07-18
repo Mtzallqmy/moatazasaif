@@ -4,6 +4,9 @@
   "buildCommand": "vite build",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/health", "destination": "/api/ready?route=health" },
+    { "source": "/api/chats", "destination": "/api/ready?route=chats" },
+    { "source": "/api/chats/(.*)", "destination": "/api/ready?route=chats&chatRoute=$1" },
     { "source": "/sitemap.xml", "destination": "/api/ready?route=sitemap" },
     { "source": "/api/platform-provider", "destination": "/api/ready?route=platform-provider" },
     { "source": "/api/api-keys", "destination": "/api/ready?route=api-keys" },

@@ -189,6 +189,24 @@ create table if not exists public.providers (
   last_latency_ms integer,
   last_http_status integer,
   last_tested_at timestamptz,
+  priority integer not null default 100,
+  timeout_ms integer not null default 45000,
+  retries integer not null default 2,
+  max_connections integer not null default 4,
+  health_status text not null default 'unknown' check (health_status in ('healthy','degraded','offline','unknown')),
+  latency_ms integer,
+  last_check_at timestamptz,
+  error_count integer not null default 0,
+  success_count integer not null default 0,
+  availability numeric(6,3) not null default 1,
+  last_error_code text,
+  last_error_message text,
+  circuit_state text not null default 'closed' check (circuit_state in ('closed','open','half_open')),
+  circuit_failures integer not null default 0,
+  circuit_opened_at timestamptz,
+  circuit_next_retry_at timestamptz,
+  tags jsonb not null default '[]'::jsonb,
+  capabilities jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -206,6 +224,24 @@ alter table public.providers add column if not exists diagnostic jsonb;
 alter table public.providers add column if not exists last_latency_ms integer;
 alter table public.providers add column if not exists last_http_status integer;
 alter table public.providers add column if not exists last_tested_at timestamptz;
+alter table public.providers add column if not exists priority integer not null default 100;
+alter table public.providers add column if not exists timeout_ms integer not null default 45000;
+alter table public.providers add column if not exists retries integer not null default 2;
+alter table public.providers add column if not exists max_connections integer not null default 4;
+alter table public.providers add column if not exists health_status text not null default 'unknown';
+alter table public.providers add column if not exists latency_ms integer;
+alter table public.providers add column if not exists last_check_at timestamptz;
+alter table public.providers add column if not exists error_count integer not null default 0;
+alter table public.providers add column if not exists success_count integer not null default 0;
+alter table public.providers add column if not exists availability numeric(6,3) not null default 1;
+alter table public.providers add column if not exists last_error_code text;
+alter table public.providers add column if not exists last_error_message text;
+alter table public.providers add column if not exists circuit_state text not null default 'closed';
+alter table public.providers add column if not exists circuit_failures integer not null default 0;
+alter table public.providers add column if not exists circuit_opened_at timestamptz;
+alter table public.providers add column if not exists circuit_next_retry_at timestamptz;
+alter table public.providers add column if not exists tags jsonb not null default '[]'::jsonb;
+alter table public.providers add column if not exists capabilities jsonb not null default '{}'::jsonb;
 alter table public.providers add column if not exists updated_at timestamptz not null default now();
 
 update public.providers

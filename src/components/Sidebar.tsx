@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { MessageCircle, LayoutDashboard, Bot, Plug, Settings, LogOut, X, Plus, Users, Newspaper, Palette } from 'lucide-react'
+import { MessageCircle, LayoutDashboard, Bot, Plug, Settings, LogOut, X, Plus, Users, Newspaper, Palette, Activity } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
 import { usePreferences } from '../contexts/PreferencesContext'
@@ -19,6 +19,7 @@ export default function Sidebar({ onClose, onLogout }: SidebarProps) {
     { to: '/chat', icon: MessageCircle, label: t('nav.chat') },
     { to: '/providers', icon: Bot, label: t('nav.providers') },
     ...(INTEGRATION_ROLES.includes(user?.role || 'user') ? [{ to: '/integrations', icon: Plug, label: t('nav.integrations') }] : []),
+    ...(['owner', 'admin', 'manager'].includes(user?.role || 'user') ? [{ to: '/developer/diagnostics', icon: Activity, label: tr('تشخيص المطور', 'Developer diagnostics') }] : []),
     ...(user?.role === 'owner' ? [{ to: '/admin/users', icon: Users, label: t('nav.users') }] : []),
     ...(CONTENT_ROLES.includes(user?.role || 'user') ? [{ to: '/admin/content', icon: Newspaper, label: tr('إدارة المحتوى', 'Content management') }] : []),
     ...(['owner', 'admin'].includes(user?.role || 'user') ? [{ to: '/admin/site', icon: Palette, label: tr('هوية الموقع', 'Site studio') }] : []),

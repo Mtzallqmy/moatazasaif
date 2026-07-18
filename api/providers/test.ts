@@ -6,6 +6,7 @@ import { enforceRateLimit, enforceSessionRateLimit } from '../_lib/rate-limit.js
 import { parseRequest, providerTestRequestSchema } from '../_lib/provider-schemas.js'
 import { ephemeralProviderRecord, ephemeralRateLimitParts, loadOwnedProviderCredentials } from '../_lib/provider-credentials.js'
 import { logTechnicalError } from '../_lib/redaction.js'
+import { recordProviderOutcome } from '../_lib/provider-manager.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)
@@ -35,18 +36,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (body.credentialMode === 'saved' && userId) {
       const { error } = await getAdminClient().from('providers').update({
-        status: diagnostic.success ? 'connected' : 'error',
-        last_tested_at: testedAt,
-        error_message: diagnostic.success ? null : diagnostic.providerMessage || diagnostic.message,
         models: diagnostic.models,
         detected_protocol: diagnostic.detectedProtocol,
         protocol: diagnostic.detectedProtocol,
-        diagnostic,
         last_latency_ms: diagnostic.latencyMs,
         last_http_status: diagnostic.httpStatus || null,
         updated_at: testedAt,
       }).eq('id', provider.id).eq('user_id', userId)
       if (error) logTechnicalError('[provider-diagnostic-save-failed]', error, { providerId: provider.id, userId })
+      await recordProviderOutcome(getAdminClient(), provider.id, userId, {
+        success: diagnostic.success,
+        latencyMs: diagnostic.latencyMs,
+        diagnostic,
+        model: diagnostic.testedModel,
+      })
     }
 
     return res.status(diagnostic.success ? 200 : 422).json({ ...diagnostic, testedAt })

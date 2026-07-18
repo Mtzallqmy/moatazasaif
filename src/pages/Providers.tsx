@@ -12,6 +12,7 @@ import {
   XCircle,
   Shield,
   Eraser,
+  Search,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -77,6 +78,8 @@ export default function Providers() {
   const [credentialMode, setCredentialMode] = useState<"session" | "saved">(
     "session",
   );
+  const [providerQuery, setProviderQuery] = useState("");
+  const [providerSort, setProviderSort] = useState<"priority" | "name" | "latency">("priority");
 
   const definitions =
     PROVIDER_DEFINITIONS as readonly (typeof PROVIDER_DEFINITIONS)[number][];
@@ -86,6 +89,7 @@ export default function Providers() {
   );
   const needsBaseUrl = Boolean(selectedDefinition?.requiresCustomBaseUrl);
   const isCustom = form.type === "custom";
+  const visibleProviders = useMemo(() => providers.filter((provider) => `${provider.name} ${provider.type} ${provider.model || ""}`.toLowerCase().includes(providerQuery.toLowerCase())).sort((left, right) => providerSort === "name" ? left.name.localeCompare(right.name) : providerSort === "latency" ? (left.latency || Number.MAX_SAFE_INTEGER) - (right.latency || Number.MAX_SAFE_INTEGER) : (left.priority || 100) - (right.priority || 100)), [providerQuery, providerSort, providers]);
 
   const loadProviders = async () => {
     if (!user) {
@@ -342,6 +346,20 @@ export default function Providers() {
     }
   };
 
+  const discoverSavedProvider = async (provider: Provider) => {
+    setTestingId(`discover:${provider.id}`);
+    try {
+      const body = await apiJson<{ models: string[]; message?: string }>('/api/providers/diagnostics', {
+        method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'discover', providerId: provider.id }),
+      });
+      setProviders((current) => current.map((item) => item.id === provider.id ? { ...item, models: body.models, status: 'connected' } : item));
+      setExpandedId(provider.id);
+      toast.success(body.message || tr('تم اكتشاف النماذج', 'Models discovered'));
+    } catch (error) { toast.error(error instanceof Error ? error.message : tr('تعذر اكتشاف النماذج', 'Could not discover models')); }
+    finally { setTestingId(null); }
+  };
+
   const testSessionProvider = async () => {
     if (!sessionProvider) return;
     setTestingId("session");
@@ -538,12 +556,15 @@ export default function Providers() {
               )}
             </div>
           ) : (
-            <div className="grid gap-4">
-              {providers.map((provider) => (
+            <>
+              <div className="card p-3 mb-4 flex flex-wrap gap-3 items-center"><input className="input flex-1 min-w-48" value={providerQuery} onChange={(event) => setProviderQuery(event.target.value)} placeholder={tr("بحث في المزودات", "Search providers")} /><select className="input w-auto" value={providerSort} onChange={(event) => setProviderSort(event.target.value as typeof providerSort)}><option value="priority">{tr("حسب الأولوية", "By priority")}</option><option value="name">{tr("حسب الاسم", "By name")}</option><option value="latency">{tr("حسب السرعة", "By latency")}</option></select></div>
+              <div className="grid gap-4">
+              {visibleProviders.map((provider) => (
                 <ProviderCard
                   key={provider.id}
                   provider={provider}
                   onTest={() => void testSavedProvider(provider)}
+                  onDiscover={() => void discoverSavedProvider(provider)}
                   testing={testingId === provider.id}
                   expanded={expandedId === provider.id}
                   onExpand={() =>
@@ -556,7 +577,8 @@ export default function Providers() {
                   onModelChange={(model) => void updateModel(provider, model)}
                 />
               ))}
-            </div>
+              </div>
+            </>
           )}
         </>
       )}
@@ -783,6 +805,7 @@ function ProviderCard({
   provider,
   isSession = false,
   onTest,
+  onDiscover,
   testing,
   expanded,
   onExpand,
@@ -793,6 +816,7 @@ function ProviderCard({
   provider: CardProvider;
   isSession?: boolean;
   onTest: () => void;
+  onDiscover?: () => void;
   testing: boolean;
   expanded: boolean;
   onExpand: () => void;
@@ -830,6 +854,9 @@ function ProviderCard({
             {diagnostic?.httpStatus && (
               <span>HTTP {diagnostic.httpStatus}</span>
             )}
+            {provider.healthStatus && <span>{tr('الصحة', 'Health')}: {provider.healthStatus}</span>}
+            {provider.availability !== undefined && <span>{tr('التوفر', 'Availability')}: {Math.round(provider.availability * 100)}%</span>}
+            {provider.circuit && <span>{tr('الدائرة', 'Circuit')}: {provider.circuit.state}</span>}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -849,6 +876,7 @@ function ProviderCard({
               </>
             )}
           </button>
+          {onDiscover && <button onClick={onDiscover} disabled={testing} className="btn btn-secondary text-xs px-3 py-2"><Search size={14} /> {tr("اكتشاف النماذج", "Discover models")}</button>}
           {models.length > 0 && (
             <select
               aria-label={tr("اختيار نموذج", "Select model")}

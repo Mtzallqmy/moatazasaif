@@ -169,6 +169,12 @@ npm run check
 - `src/lib/session-provider.ts`, `local-chat-store.ts`, `chat-api.ts`
 - `supabase/migrations/20260714190000_byok_provider_protocol.sql`
 
+### Provider Manager والتشخيص الإنتاجي
+
+كل مزود محفوظ يملك أولوية وإعدادات timeout/retry وعدادات نجاح/فشل وتوفرًا وحالة `healthy/degraded/offline/unknown` وحالة Circuit Breaker دائمة في Supabase. يستعمل `/api/providers/diagnostics` لاختبار المزود أو فحص صحته أو اكتشاف النماذج أو إعادة ضبط الدائرة، و`/api/providers/logs?logs=true&format=json|csv` لتصدير سجل منقح لا يحتوي مفاتيح. يعمل `/api/providers/health` عبر Vercel Cron كل ساعة عند ضبط `CRON_SECRET`، ويطبق الخادم failover للمزود المحفوظ البديل الذي يدعم النموذج نفسه قبل إرجاع خطأ للمستخدم.
+
+الأخطاء تصنّف إلى مصادقة، صلاحية، حصة، حد طلبات، نموذج، endpoint، شبكة، timeout أو upstream مع رسالة المزود المنقحة وHint إصلاح. لا توجد Queue محلية مزعومة؛ `queueSize` المعروض صفر لأن Vercel Functions قصيرة العمر، وللمهام الطويلة يجب إضافة طابور خارجي durable.
+
 ## قبل النشر
 
 راجع [PRODUCTION-CHECKLIST.md](./PRODUCTION-CHECKLIST.md) و[SECURITY.md](./SECURITY.md). لا يحتوي المشروع على كلمة مرور المالك أو مفاتيح حقيقية؛ تُضبط جميعها كمتغيرات خادمية.

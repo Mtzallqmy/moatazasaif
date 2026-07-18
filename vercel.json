@@ -7,6 +7,9 @@
     { "source": "/api/health", "destination": "/api/ready?route=health" },
     { "source": "/api/chats", "destination": "/api/ready?route=chats" },
     { "source": "/api/chats/(.*)", "destination": "/api/ready?route=chats&chatRoute=$1" },
+    { "source": "/api/providers/diagnostics", "destination": "/api/ready?route=provider-manager" },
+    { "source": "/api/providers/logs", "destination": "/api/ready?route=provider-manager&logs=true" },
+    { "source": "/api/providers/health", "destination": "/api/ready?route=provider-health" },
     { "source": "/sitemap.xml", "destination": "/api/ready?route=sitemap" },
     { "source": "/api/platform-provider", "destination": "/api/ready?route=platform-provider" },
     { "source": "/api/api-keys", "destination": "/api/ready?route=api-keys" },
@@ -59,5 +62,8 @@
       "maxDuration": 60,
       "regions": ["sin1"]
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/providers/health", "schedule": "0 * * * *" }
+  ]
 }

@@ -102,7 +102,7 @@ export async function finalizePlatformUsage(
 export async function loadPlatformProviderCredentials(admin: SupabaseClient, providerId: string) {
   const { data: provider, error } = await admin
     .from('providers')
-    .select('id,user_id,name,type,protocol,base_url,model,encrypted_key,is_enabled,status,models')
+    .select('id,user_id,name,type,protocol,base_url,model,encrypted_key,is_enabled,status,models,retries,priority,timeout_ms,max_connections,health_status,circuit_state,circuit_failures,circuit_next_retry_at')
     .eq('id', providerId)
     .eq('is_platform_shared', true)
     .eq('is_platform_default', true)

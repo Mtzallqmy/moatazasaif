@@ -16,7 +16,16 @@ export type StreamClientEvent =
         model: string;
         provider: string;
         protocol: ProviderProtocol;
-        endpoint: string;
+        endpoint?: string;
+        requestId?: string;
+      };
+    }
+  | {
+      event: "status";
+      data: {
+        phase: "accepted" | "connecting" | "retrying";
+        requestId?: string;
+        attempt?: number;
       };
     }
   | { event: "delta"; data: { content: string } }
@@ -26,7 +35,7 @@ export type StreamClientEvent =
     }
   | {
       event: "error";
-      data: { code: string; message: string; category: string };
+      data: { code: string; message: string; category: string; requestId?: string };
     }
   | { event: "done"; data: Record<string, never> };
 
@@ -79,6 +88,7 @@ export class ChatStreamError extends Error {
     message: string,
     public readonly code = "stream_error",
     public readonly category = "unknown",
+    public readonly requestId?: string,
   ) {
     super(message);
     this.name = "ChatStreamError";
@@ -132,6 +142,7 @@ async function responseError(response: Response) {
       `HTTP ${response.status}`,
     diagnostic?.code || body?.code,
     diagnostic?.category,
+    response.headers.get("x-request-id") || diagnostic?.requestId || body?.requestId,
   );
 }
 
@@ -165,6 +176,8 @@ export async function streamChat(params: StreamChatParams): Promise<{
   let content = "";
   let tokens = 0;
   let meta: (StreamClientEvent & { event: "meta" }) | undefined;
+  let receivedDone = false;
+  const requestId = response.headers.get("x-request-id") || undefined;
   const abortReader = () => {
     void reader.cancel("aborted by user").catch(() => undefined);
   };
@@ -173,7 +186,8 @@ export async function streamChat(params: StreamChatParams): Promise<{
   const processBlock = (block: string) => {
     let eventName = "message";
     const dataLines: string[] = [];
-    for (const line of block.split("\n")) {
+    for (const line of block.split(/\r\n|\r|\n/)) {
+      if (!line || line.startsWith(":")) continue;
       if (line.startsWith("event:")) eventName = line.slice(6).trim();
       if (line.startsWith("data:"))
         dataLines.push(line.slice(5).replace(/^ /, ""));
@@ -202,8 +216,39 @@ export async function streamChat(params: StreamChatParams): Promise<{
         event.data.message,
         event.data.code,
         event.data.category,
+        event.data.requestId || requestId,
       );
+    if (event.event === "done") receivedDone = true;
     return event.event === "done";
+  };
+
+  const completeResult = () => {
+    if (!receivedDone) {
+      throw new ChatStreamError(
+        "انقطع البث قبل اكتمال الإجابة",
+        "stream_incomplete",
+        "network",
+        requestId,
+      );
+    }
+    if (!content.trim()) {
+      throw new ChatStreamError(
+        "اكتمل الطلب دون أن يعيد المزود نصًا",
+        "empty_stream_response",
+        "upstream",
+        requestId,
+      );
+    }
+    return { content, tokens, meta };
+  };
+
+  const nextBoundary = (value: string) => {
+    const candidates = [
+      { index: value.indexOf("\r\n\r\n"), length: 4 },
+      { index: value.indexOf("\n\n"), length: 2 },
+      { index: value.indexOf("\r\r"), length: 2 },
+    ].filter((candidate) => candidate.index >= 0);
+    return candidates.sort((left, right) => left.index - right.index)[0];
   };
 
   try {
@@ -212,19 +257,19 @@ export async function streamChat(params: StreamChatParams): Promise<{
       if (done) break;
       if (params.signal?.aborted)
         throw new DOMException("Aborted", "AbortError");
-      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-      let boundary = buffer.indexOf("\n\n");
-      while (boundary !== -1) {
-        const block = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        if (processBlock(block)) return { content, tokens, meta };
-        boundary = buffer.indexOf("\n\n");
+      buffer += decoder.decode(value, { stream: true });
+      let boundary = nextBoundary(buffer);
+      while (boundary) {
+        const block = buffer.slice(0, boundary.index);
+        buffer = buffer.slice(boundary.index + boundary.length);
+        if (processBlock(block)) return completeResult();
+        boundary = nextBoundary(buffer);
       }
     }
     buffer += decoder.decode();
     if (buffer.trim()) processBlock(buffer.trim());
     if (params.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    return { content, tokens, meta };
+    return completeResult();
   } finally {
     params.signal?.removeEventListener("abort", abortReader);
     if (params.signal?.aborted)

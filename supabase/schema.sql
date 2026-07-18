@@ -190,7 +190,7 @@ create table if not exists public.providers (
   last_http_status integer,
   last_tested_at timestamptz,
   priority integer not null default 100,
-  timeout_ms integer not null default 45000,
+  timeout_ms integer not null default 35000,
   retries integer not null default 2,
   max_connections integer not null default 4,
   health_status text not null default 'unknown' check (health_status in ('healthy','degraded','offline','unknown')),
@@ -225,7 +225,7 @@ alter table public.providers add column if not exists last_latency_ms integer;
 alter table public.providers add column if not exists last_http_status integer;
 alter table public.providers add column if not exists last_tested_at timestamptz;
 alter table public.providers add column if not exists priority integer not null default 100;
-alter table public.providers add column if not exists timeout_ms integer not null default 45000;
+alter table public.providers add column if not exists timeout_ms integer not null default 35000;
 alter table public.providers add column if not exists retries integer not null default 2;
 alter table public.providers add column if not exists max_connections integer not null default 4;
 alter table public.providers add column if not exists health_status text not null default 'unknown';
@@ -265,7 +265,48 @@ alter table public.providers drop constraint if exists providers_protocol_check;
 alter table public.providers add constraint providers_protocol_check
   check (protocol in ('openai-compatible','gemini','anthropic'));
 
+alter table public.providers drop constraint if exists providers_health_status_check;
+alter table public.providers add constraint providers_health_status_check
+  check (health_status in ('healthy','degraded','offline','unknown'));
+alter table public.providers drop constraint if exists providers_circuit_state_check;
+alter table public.providers add constraint providers_circuit_state_check
+  check (circuit_state in ('closed','open','half_open'));
+update public.providers set timeout_ms = least(timeout_ms, 45000) where timeout_ms > 45000;
+alter table public.providers drop constraint if exists providers_manager_limits_check;
+alter table public.providers add constraint providers_manager_limits_check
+  check (priority between 0 and 100000 and timeout_ms between 5000 and 45000 and retries between 0 and 5 and max_connections between 1 and 100);
+
 create index if not exists providers_user_id_idx on public.providers(user_id);
+create index if not exists providers_manager_selection_idx
+  on public.providers(user_id, is_enabled, circuit_state, health_status, priority);
+create index if not exists providers_manager_health_idx
+  on public.providers(health_status, last_check_at);
+
+create table if not exists public.provider_manager_logs (
+  id uuid primary key default gen_random_uuid(),
+  provider_id uuid not null references public.providers(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  model text,
+  request_id text not null,
+  status_code integer,
+  category text not null,
+  code text not null,
+  message text not null,
+  duration_ms integer not null default 0 check (duration_ms >= 0),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists provider_manager_logs_owner_time_idx
+  on public.provider_manager_logs(user_id, created_at desc);
+create index if not exists provider_manager_logs_provider_time_idx
+  on public.provider_manager_logs(provider_id, created_at desc);
+alter table public.provider_manager_logs enable row level security;
+drop policy if exists provider_manager_logs_owner_read on public.provider_manager_logs;
+create policy provider_manager_logs_owner_read on public.provider_manager_logs
+  for select to authenticated using ((select auth.uid()) = user_id);
+revoke all on public.provider_manager_logs from public, anon, authenticated;
+grant select on public.provider_manager_logs to authenticated;
+grant all on public.provider_manager_logs to service_role;
 
 -- Field-level protection: browser clients never receive encrypted_key.
 -- This helper is kept outside the exposed public schema and is used only by
@@ -649,7 +690,7 @@ update public.messages set attachments = '[]'::jsonb where jsonb_typeof(attachme
 alter table public.messages drop constraint if exists messages_attachments_metadata_check;
 alter table public.messages add constraint messages_attachments_metadata_check check (
   jsonb_typeof(attachments) = 'array'
-  and jsonb_array_length(attachments) <= 3
+  and jsonb_array_length(attachments) <= 5
   and pg_column_size(attachments) <= 16384
   and not jsonb_path_exists(attachments, '$[*].dataUrl')
   and not jsonb_path_exists(attachments, '$[*].text')

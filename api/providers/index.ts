@@ -30,7 +30,7 @@ export function publicProvider(provider: any) {
     platformDailyRequestLimit: provider.platform_daily_request_limit ?? undefined,
     platformDailyTokenLimit: provider.platform_daily_token_limit ?? undefined,
     priority: provider.priority ?? 100,
-    timeout: provider.timeout_ms ?? 45_000,
+    timeout: provider.timeout_ms ?? 35_000,
     retries: provider.retries ?? 2,
     maxConnections: provider.max_connections ?? 4,
     healthStatus: provider.health_status || 'unknown',

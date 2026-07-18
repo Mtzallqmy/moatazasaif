@@ -8,8 +8,10 @@
 4. نفّذ migration Telegram الجديدة `supabase/migrations/20260714203349_telegram_integrations.sql`.
 5. نفّذ migration الاتصالات `supabase/migrations/20260715222138_external_integrations.sql`.
 6. نفّذ `supabase/migrations/20260718120000_provider_manager.sql` لإضافة Health/Circuit/Retry/Logs (قابلة لإعادة التنفيذ ولا تحذف البيانات).
-7. تأكد أن التنفيذ انتهى دون أخطاء.
-8. لا تمنح `authenticated` أو `anon` صلاحيات مباشرة على جداول الأسرار أو جدولي `providers` و`external_integrations`؛ الإدارة تتم عبر API الخادمي فقط.
+7. نفّذ `supabase/migrations/20260718212100_chat_files_and_projects.sql` لإضافة التخزين الخاص والمشاريع.
+8. نفّذ `supabase/migrations/20260718224430_align_chat_attachment_limit.sql` لتوحيد حد المرفقات وميزانية مهلة المزود.
+9. تأكد أن التنفيذ انتهى دون أخطاء، ثم شغّل Security وPerformance Advisors.
+10. لا تمنح `authenticated` أو `anon` صلاحيات مباشرة على جداول الأسرار أو جدولي `providers` و`external_integrations`؛ الإدارة تتم عبر API الخادمي فقط.
 
 ## 2. متغيرات Vercel
 
@@ -52,11 +54,14 @@ BOOTSTRAP_TOKEN=رمز-عشوائي-طويل-جداً
 ## 4. تحقق التشغيل
 
 - `GET /api/health` يجب أن يعيد `status: ok`.
-- `GET /api/ready` يجب أن يعيد `status: ready` و`rateLimit: ready`.
+- `GET /api/ready` يجب أن يعيد `status: ready`. ظهور `database_dependency_unavailable` يعني أن واحدًا أو أكثر من الترحيلات السابقة لم يُطبّق.
 - `GET https://bsmzknhkzepaqeffrfbc.supabase.co/auth/v1/settings` مع المفتاح العام يجب أن يعيد `external.google: true` و`external.github: true` قبل اختبار زري OAuth.
 - اختبر Google وGitHub من النطاق الأساسي و`www` و`https://moatazasaif.vercel.app/login`، وتأكد أن كل تدفق يعود إلى المضيف نفسه وأن `/api/auth/session` يعيد ملف المستخدم.
 - أنشئ مستخدمًا تجريبيًا من لوحة الإدارة وسجّل الدخول باسم المستخدم.
 - أضف مفتاح مزود تملكه، نفّذ «اختبار واكتشاف»، ثم أرسل رسالة حقيقية.
+- بدّل بين نموذجين من شريط الدردشة، وتأكد أن النموذج المحدد يظهر في رأس الإجابة.
+- ارفع صورة وملف كود معًا، أرسل الرسالة، نزّل المرفق من الرسالة، ثم أعد تحميل الصفحة وتأكد أن بياناته الوصفية ما زالت ظاهرة.
+- افصل المزود أثناء البث أو استخدم نموذجًا غير صالح وتأكد من ظهور بطاقة خطأ فيها Retry ومعرّف طلب، دون حفظ إجابة فارغة.
 - راجع أن رسالة الخطأ المعروضة هي رسالة المزود وتصنيفها، وليست نجاحًا وهميًا.
 - اختبر الجلسة المؤقتة دون Supabase: المفتاح في `sessionStorage` والمحادثات في IndexedDB، ثم استخدم زر المسح وتحقق من اختفاء الاثنين.
 - راجع Network response وVercel logs وتأكد من عدم وجود `apiKey` أو Authorization أو `encrypted_key`.

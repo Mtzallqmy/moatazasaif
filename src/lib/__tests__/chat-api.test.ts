@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { streamChat } from '../chat-api'
+import { ChatStreamError, streamChat } from '../chat-api'
 import type { SessionProviderCredential } from '../session-provider'
 
 const sessionProvider: SessionProviderCredential = {
@@ -42,5 +42,41 @@ describe('client streaming cancellation', () => {
     // rejection (which prevents persisting partial output).
     expect(abort.signal.aborted).toBe(true)
     expect(cancelled || abort.signal.aborted).toBe(true)
+  })
+})
+
+describe('client SSE integrity', () => {
+  const run = (chunks: string[]) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk))
+        controller.close()
+      },
+    }), { status: 200, headers: { 'x-request-id': 'request-test-1' } })))
+    return streamChat({
+      credentialMode: 'session', sessionProvider, model: 'model-a',
+      messages: [{ role: 'user', content: 'hi' }], onContent: () => undefined,
+    })
+  }
+
+  it('parses CRLF boundaries even when the CRLF sequence is split across chunks', async () => {
+    const result = await run([
+      'event: status\r\ndata: {"phase":"accepted","requestId":"request-test-1"}\r',
+      '\n\r\nevent: delta\r\ndata: {"content":"hello"}\r\n',
+      '\r\nevent: done\r\ndata: {}\r\n\r\n',
+    ])
+    expect(result.content).toBe('hello')
+  })
+
+  it('rejects a stream that closes without a done event', async () => {
+    await expect(run(['event: delta\ndata: {"content":"partial"}\n\n'])).rejects.toMatchObject({
+      name: 'ChatStreamError', code: 'stream_incomplete', requestId: 'request-test-1',
+    })
+  })
+
+  it('rejects a completed stream with no assistant content', async () => {
+    await expect(run(['event: done\ndata: {}\n\n'])).rejects.toEqual(expect.objectContaining<Partial<ChatStreamError>>({
+      code: 'empty_stream_response', requestId: 'request-test-1',
+    }))
   })
 })

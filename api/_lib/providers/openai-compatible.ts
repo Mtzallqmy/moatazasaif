@@ -20,6 +20,27 @@ function chatBody(model: string, messages: ProviderChatMessage[], stream: boolea
   return { model, messages: openAiMessages(messages), stream, temperature: 0.7, max_tokens: getProviderRuntimeEnv().PROVIDER_MAX_OUTPUT_TOKENS }
 }
 
+function leanChatBody(model: string, messages: ProviderChatMessage[], stream: boolean) {
+  return { model, messages: openAiMessages(messages), stream }
+}
+
+function chatBodyVariants(model: string, messages: ProviderChatMessage[], stream: boolean) {
+  const full = stream
+    ? { ...chatBody(model, messages, true), stream_options: { include_usage: true } }
+    : chatBody(model, messages, false)
+  return [full, leanChatBody(model, messages, stream)]
+}
+
+function canRetryLeanBody(error: unknown) {
+  return error instanceof ProviderRequestError && [400, 422].includes(error.details.status || 0)
+}
+
+function openAiText(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (!Array.isArray(value)) return ''
+  return value.map((part: any) => typeof part === 'string' ? part : String(part?.text || part?.content || '')).join('')
+}
+
 function endpointCandidates(baseUrl: string, resource: string) {
   const candidates = [`${baseUrl}/${resource}`]
   if (!/\/v\d+(beta)?$/i.test(baseUrl)) candidates.push(`${baseUrl}/v1/${resource}`)
@@ -72,15 +93,19 @@ export const openAiCompatibleAdapter: ProviderAdapter = {
   async generateText(config, model, messages, signal): Promise<ProviderGenerateResult> {
     let lastChatError: unknown
     for (const chatEndpoint of endpointCandidates(config.baseUrl, 'chat/completions')) {
-      try {
-        const response = await providerFetch(chatEndpoint, { method: 'POST', headers: headers(config), body: JSON.stringify(chatBody(model, messages, false)) }, signal)
-        const payload = await readProviderJson(response, chatEndpoint)
-        const content = payload?.choices?.[0]?.message?.content
-        if (typeof content !== 'string' || !content) throw new ProviderRequestError({ message: 'استجابة المزود لا تحتوي choices[0].message.content', code: 'invalid_chat_response', endpoint: chatEndpoint })
-        return { content, usage: usage(payload?.usage?.prompt_tokens, payload?.usage?.completion_tokens, payload?.usage?.total_tokens), protocol: this.protocol, endpoint: chatEndpoint, httpStatus: response.status }
-      } catch (error) {
-        lastChatError = error
-        if (!canTryAlternateEndpoint(error)) throw error
+      for (const [variantIndex, body] of chatBodyVariants(model, messages, false).entries()) {
+        try {
+          const response = await providerFetch(chatEndpoint, { method: 'POST', headers: headers(config), body: JSON.stringify(body) }, signal)
+          const payload = await readProviderJson(response, chatEndpoint)
+          const content = openAiText(payload?.choices?.[0]?.message?.content) || openAiText(payload?.choices?.[0]?.text)
+          if (!content) throw new ProviderRequestError({ message: 'استجابة المزود لا تحتوي نصًا قابلاً للعرض', code: 'invalid_chat_response', endpoint: chatEndpoint })
+          return { content, usage: usage(payload?.usage?.prompt_tokens, payload?.usage?.completion_tokens, payload?.usage?.total_tokens), protocol: this.protocol, endpoint: chatEndpoint, httpStatus: response.status }
+        } catch (error) {
+          lastChatError = error
+          if (variantIndex === 0 && canRetryLeanBody(error)) continue
+          if (!canTryAlternateEndpoint(error)) throw error
+          break
+        }
       }
     }
 
@@ -113,25 +138,41 @@ export const openAiCompatibleAdapter: ProviderAdapter = {
     let response: Response | undefined
     let lastError: unknown
     for (const candidate of endpointCandidates(config.baseUrl, 'chat/completions')) {
-      try {
-        const candidateResponse = await providerFetch(candidate, { method: 'POST', headers: headers(config), body: JSON.stringify({ ...chatBody(model, messages, true), stream_options: { include_usage: true } }) }, signal)
-        if (!candidateResponse.ok) await readProviderJson(candidateResponse, candidate)
-        endpoint = candidate
-        response = candidateResponse
-        break
-      } catch (error) {
-        lastError = error
-        if (!canTryAlternateEndpoint(error)) throw error
+      for (const [variantIndex, body] of chatBodyVariants(model, messages, true).entries()) {
+        try {
+          const candidateResponse = await providerFetch(candidate, { method: 'POST', headers: headers(config), body: JSON.stringify(body) }, signal)
+          if (!candidateResponse.ok) await readProviderJson(candidateResponse, candidate)
+          endpoint = candidate
+          response = candidateResponse
+          break
+        } catch (error) {
+          lastError = error
+          if (variantIndex === 0 && canRetryLeanBody(error)) continue
+          if (!canTryAlternateEndpoint(error)) throw error
+          break
+        }
       }
+      if (response) break
     }
     if (!response) throw lastError || new ProviderRequestError({ message: 'لم يتم العثور على endpoint بث متوافق', code: 'stream_endpoint_missing', endpoint: config.baseUrl })
     yield { event: 'meta', data: { model, provider: config.type, protocol: this.protocol, endpoint } }
+    const contentType = response.headers.get('content-type') || ''
+    if (/application\/json/i.test(contentType)) {
+      const payload = await readProviderJson(response, endpoint)
+      const content = openAiText(payload?.choices?.[0]?.message?.content) || openAiText(payload?.choices?.[0]?.text)
+      if (!content) throw new ProviderRequestError({ message: 'أعاد المزود استجابة JSON دون نص', code: 'invalid_chat_response', endpoint })
+      yield { event: 'delta', data: { content } }
+      yield { event: 'usage', data: usage(payload?.usage?.prompt_tokens, payload?.usage?.completion_tokens, payload?.usage?.total_tokens) }
+      yield { event: 'done', data: {} }
+      return
+    }
     let finalUsage = emptyUsage()
     for await (const message of parseSseStream(response, endpoint)) {
       if (message.data === '[DONE]') break
       const payload = parseStreamJson(message.data, endpoint)
-      const content = payload?.choices?.[0]?.delta?.content
-      if (typeof content === 'string' && content) yield { event: 'delta', data: { content } }
+      const choice = payload?.choices?.[0]
+      const content = openAiText(choice?.delta?.content) || openAiText(choice?.text) || openAiText(choice?.message?.content)
+      if (content) yield { event: 'delta', data: { content } }
       if (payload?.usage) {
         finalUsage = usage(payload.usage.prompt_tokens, payload.usage.completion_tokens, payload.usage.total_tokens)
         yield { event: 'usage', data: finalUsage }

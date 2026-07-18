@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from './_lib/vercel.js'
+import { randomUUID } from 'node:crypto'
 import { authenticate, getAdminClient } from './_lib/supabase.js'
 import { ApiError, methodNotAllowed, sendError, setJsonHeaders } from './_lib/http.js'
 import { assertSafeProviderUrl, generateProviderText, inferProtocol, providerBaseUrl, providerDiagnostic, sanitizeProviderEndpoint, streamProviderText, type ProviderRecord, type ProviderStreamEvent } from './_lib/provider-runtime.js'
@@ -10,7 +11,7 @@ import { estimatePlatformTokens, finalizePlatformUsage, loadPlatformProviderCred
 import { assertMultimodalSupport } from './_lib/providers/multimodal.js'
 import { recordProviderOutcome, runProviderRetry, selectProviderCandidates, shouldFailOverProviderStream, streamProviderRetry, type ProviderManagerRecord } from './_lib/provider-manager.js'
 
-function writeSse(res: VercelResponse, event: ProviderStreamEvent['event'], data: unknown, extraSecrets: string[] = []) {
+function writeSse(res: VercelResponse, event: ProviderStreamEvent['event'] | 'status', data: unknown, extraSecrets: string[] = []) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(redactUnknown(data, extraSecrets, 0, Number.MAX_SAFE_INTEGER))}\n\n`)
 }
 
@@ -28,6 +29,8 @@ async function saveProviderFailure(providerId: string, userId: string, diagnosti
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setJsonHeaders(res)
+  const requestId = randomUUID()
+  res.setHeader('X-Request-Id', requestId)
   if (req.method !== 'POST') return methodNotAllowed(res, ['POST'])
 
   let savedUserId: string | undefined
@@ -109,6 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             protocol: result.protocol,
             endpoint: body.credentialMode === 'platform' ? undefined : result.endpoint ? sanitizeProviderEndpoint(result.endpoint, [candidate.apiKey]) : undefined,
             latencyMs: Date.now() - startedAt,
+            requestId,
           })
         } catch (providerError) {
           const diagnostic = providerDiagnostic(providerError, inferProtocol(candidate.provider.type, candidate.provider.base_url, candidate.provider.protocol), candidateStartedAt, [candidate.apiKey])
@@ -129,28 +133,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('Connection', 'keep-alive')
     res.setHeader('X-Accel-Buffering', 'no')
+    writeSse(res, 'status', { phase: 'accepted', requestId })
 
     const controller = new AbortController()
-    const abort = () => controller.abort()
+    const requestDeadline = AbortSignal.timeout(48_000)
+    const providerSignal = AbortSignal.any([controller.signal, requestDeadline])
+    const abort = () => controller.abort(new DOMException('Client disconnected', 'AbortError'))
     req.once('aborted', abort)
     res.once('close', abort)
     let sentDone = false
     let sentProviderOutput = false
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded && !res.destroyed) res.write(': heartbeat\n\n')
+    }, 12_000)
 
     try {
       platformGenerationStarted = true
       let streamCompleted = false
       let lastStreamError: unknown
-      for (const candidate of providerCandidates) {
+      for (const [candidateIndex, candidate] of providerCandidates.entries()) {
         provider = candidate.provider
         apiKey = candidate.apiKey
         const candidateStartedAt = Date.now()
         try {
-          for await (const message of streamProviderRetry(candidate.provider, (signal) => streamProviderText(candidate.provider, candidate.apiKey, model, body.messages, signal), controller.signal)) {
+          writeSse(res, 'status', {
+            phase: candidateIndex === 0 ? 'connecting' : 'retrying',
+            requestId,
+            attempt: candidateIndex + 1,
+          }, [candidate.apiKey])
+          for await (const message of streamProviderRetry(candidate.provider, (signal) => streamProviderText(candidate.provider, candidate.apiKey, model, body.messages, signal), providerSignal)) {
             if (res.writableEnded || res.destroyed) break
             if (message.event === 'usage') platformActualTokens = Math.max(platformActualTokens, Number(message.data.totalTokens || 0))
-            const publicData = body.credentialMode === 'platform' && message.event === 'meta'
-              ? { ...message.data, provider: 'platform', endpoint: undefined }
+            const publicData = message.event === 'meta'
+              ? {
+                  ...message.data,
+                  requestId,
+                  ...(body.credentialMode === 'platform' ? { provider: 'platform', endpoint: undefined } : {}),
+                }
               : message.data
             writeSse(res, message.event, publicData, [candidate.apiKey])
             if (message.event === 'delta' && message.data.content) sentProviderOutput = true
@@ -179,10 +198,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           code: diagnostic.code || 'provider_stream_failed',
           message: diagnostic.providerMessage || diagnostic.message,
           category: diagnostic.category || 'unknown',
+          requestId,
         }, [apiKey])
         writeSse(res, 'done', {}, [apiKey])
       }
     } finally {
+      clearInterval(heartbeat)
       await settlePlatformUsage(platformGenerationStarted)
       req.off('aborted', abort)
       res.off('close', abort)

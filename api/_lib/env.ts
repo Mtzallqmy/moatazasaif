@@ -28,8 +28,9 @@ const rawSchema = z.object({
   BOOTSTRAP_TOKEN: optionalToken,
   USERNAME_EMAIL_DOMAIN: z.string().regex(/^[a-z0-9.-]+$/i).default('users.moataz.invalid'),
   APP_URL: optionalUrl,
-  // Keep enough time for error handling before the 60-second Vercel limit.
-  PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(55_000).default(45_000),
+  // Leave a deterministic margin for SSE error delivery and usage settlement
+  // before the 60-second function deadline.
+  PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(45_000).default(35_000),
   PROVIDER_MAX_RESPONSE_BYTES: z.coerce.number().int().min(64_000).max(20_000_000).default(5_000_000),
   PROVIDER_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).max(32_768).default(4_096),
   TELEGRAM_API_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(15_000),

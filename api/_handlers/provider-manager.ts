@@ -71,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const now = new Date().toISOString()
       const { error } = await admin.from('providers').update({ models: result.models, detected_protocol: result.protocol, protocol: result.protocol, capabilities: { models: true, chat: true, streaming: result.protocol === 'openai-compatible' || result.protocol === 'gemini' || result.protocol === 'anthropic' }, health_status: 'healthy', latency_ms: Date.now() - startedAt, last_check_at: now, updated_at: now }).eq('id', body.providerId).eq('user_id', auth.user.id)
       if (error) logTechnicalError('[provider-models-save-failed]', error, { providerId: body.providerId, userId: auth.user.id })
-      await recordProviderOutcome(admin, auth.user.id, body.providerId, {
+      await recordProviderOutcome(admin, body.providerId, auth.user.id, {
         success: true,
         latencyMs: Date.now() - startedAt,
         model: resolved.provider.model || undefined,
@@ -80,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, protocol: result.protocol, models: result.models, endpoint: result.endpoint, latencyMs: Date.now() - startedAt, message: `تم اكتشاف ${result.models.length} نموذجًا فعليًا` })
     } catch (error) {
       const diagnostic = providerDiagnostic(error, inferProtocol(resolved.provider.type, resolved.provider.base_url, resolved.provider.protocol), startedAt, [resolved.apiKey])
-      await recordProviderOutcome(admin, auth.user.id, body.providerId, { success: false, latencyMs: Date.now() - startedAt, diagnostic, model: resolved.provider.model || undefined })
+      await recordProviderOutcome(admin, body.providerId, auth.user.id, { success: false, latencyMs: Date.now() - startedAt, diagnostic, model: resolved.provider.model || undefined })
       return res.status(422).json({ ...diagnostic, code: diagnostic.code || 'models_discovery_failed', message: 'تعذر اكتشاف النماذج', providerMessage: redactText(diagnostic.providerMessage || (error instanceof Error ? error.message : 'فشل الطلب'), [resolved.apiKey]) })
     }
   } catch (error) {

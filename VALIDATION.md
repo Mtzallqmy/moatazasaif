@@ -47,7 +47,7 @@ Breaker، Retry مع Exponential Backoff، Failover قبل أول chunk، واك
 
 | الفحص | النتيجة | الدليل |
 |---|---|---|
-| Deployment from `main` | PASS | `eea7b2f37a53aa06ebe30f427bd185d6278774ab` → READY |
+| Deployment from `main` | PASS | `9143e52ebb2554925a4bb00d1a2e768eacf3f399` → READY |
 | `GET /api/health` | PASS | HTTP 200 على `https://moatazasaif.vercel.app` |
 | `GET /api/ready` | PASS | HTTP 200 على `https://moatazasaif.vercel.app` |
 | Diagnostics without JWT | PASS | HTTP 401 (حماية متوقعة) |

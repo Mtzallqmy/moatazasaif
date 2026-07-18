@@ -7,16 +7,18 @@
 - تسجيل الدخول بالبريد أو اسم المستخدم وكلمة المرور.
 - جلسات حساب آمنة: access/refresh cookies من نوع HttpOnly وSecure في الإنتاج، مع بقاء جلسة Supabase في ذاكرة المتصفح فقط.
 - تسجيل دخول Google وGitHub عبر OAuth PKCE؛ يتم تبادل authorization code داخل Vercel Function ولا توضع رموز المزود في عنوان المتصفح.
-- ملف `profiles` آمن كمصدر رسمي للأدوار: `owner`, `admin`, `supervisor`, `user`.
+- ملف `profiles` آمن كمصدر رسمي للأدوار: `owner`, `admin`, `manager`, `editor`, `user`.
 - لوحة إدارة للمستخدمين: إنشاء، تفعيل/إيقاف، تغيير الدور، إعادة تعيين كلمة مرور مؤقتة، وحذف بواسطة المالك.
 - إنشاء حساب باسم مستخدم فقط عبر بريد داخلي لا يظهر للمستخدم.
 - تهيئة المالك الأول رسميًا عبر Supabase Admin API، بدل الإدخال المباشر في `auth.users`.
 - تخزين مفاتيح المزودات مشفّرة بـ AES-256-GCM من جهة الخادم، مع منع جدول المفاتيح من الوصول المباشر عبر المتصفح.
-- Gemini وAnthropic ومزودات OpenAI-compatible، بما فيها OpenAI وOpenRouter وGroq وDeepSeek وMistral وTogether وNVIDIA.
+- Gemini وAnthropic ومزودات OpenAI-compatible، بما فيها OpenAI وOpenRouter وGroq وDeepSeek وMistral وTogether وNVIDIA وZenLLM وxAI وCerebras وFireworks وSiliconFlow.
 - اكتشاف فعلي للنماذج، مع اختبار توليد بديل عندما لا يدعم المزود `/models`.
 - تشخيص أخطاء المفتاح والصلاحية والرصيد وحد الطلبات والنموذج والبوابة والشبكة والمهلة وخادم المزود، مع عرض رسالة المزود الأصلية.
 - حماية Base URL من SSRF عبر منع localhost والشبكات الخاصة والتحقق من DNS.
 - محادثات ورسائل محفوظة في Supabase ومعزولة بسياسات RLS.
+- مرفقات دردشة خاصة للصور والملفات النصية والبرمجية، مع تحقق التوقيع والحجم والملكية وتنزيل مصادق عليه.
+- مساحة مشاريع بقوالب React وNode API وPython، ومحرر ملفات، واستخراج ملفات الكود من الإجابات، وتصدير ZIP.
 - تقييد ذري للطلبات داخل PostgreSQL لمسارات الدخول والإدارة والمزودات والمحادثة.
 - `/api/health` و`/api/ready` للفحص التشغيلي؛ readiness يتحقق أيضًا من قاعدة البيانات وخدمة التقييد.
 - Telegram Webhook حقيقي، واتصالات GitHub وWhatsApp Cloud API تُختبر من الخادم وتُحفظ مشفّرة دون إعادة التوكن إلى المتصفح.
@@ -60,7 +62,8 @@ Telegram يستخدم Webhook خادميًا لأن Telegram Bot API لا يتح
 1. أنشئ مشروع Supabase.
 2. نفّذ `supabase/schema.sql` كاملًا في SQL Editor لمشروع جديد.
 3. للمشاريع الموجودة، نفّذ migration القابل لإعادة التشغيل `supabase/migrations/20260714190000_byok_provider_protocol.sql` بعد المخطط القديم. يضيف `protocol` ويستبدل قيد النوع الصلب بقيد آمن يسمح بـ `dahl` والأنواع المركزية.
-4. انسخ `.env.example` إلى `.env.local` للتطوير، وأضف القيم نفسها في Vercel دون رفع الأسرار إلى GitHub.
+4. نفّذ `supabase/migrations/20260718212100_chat_files_and_projects.sql` لإضافة التخزين الخاص والمشاريع.
+5. انسخ `.env.example` إلى `.env.local` للتطوير، وأضف القيم نفسها في منصة النشر دون رفع الأسرار إلى GitHub.
 
 ## تهيئة المالك الأول
 
@@ -130,8 +133,8 @@ npm run check
 - جميع المتغيرات ذات `VITE_` فقط قابلة للظهور في المتصفح.
 - `SUPABASE_SERVICE_ROLE_KEY` و`ENCRYPTION_KEY` وبيانات bootstrap تبقى Server-only.
 - استخدم HTTPS لمزودات API في الإنتاج.
-- فعّل Email Auth في Supabase واضبط Site URL وRedirect URLs على نطاق Vercel. يجب أن يكون Site URL هو `https://moatazasaif.vercel.app` وأن تتضمن Redirect URLs العنوان `https://moatazasaif.vercel.app/login`.
-- اضبط `VITE_APP_URL=https://moatazasaif.vercel.app` كمتغير عام للواجهة. يوجد fallback إنتاجي داخل الكود، لكن ضبطه صراحةً يمنع اختلاف الروابط عند استخدام نطاق مخصص.
+- فعّل Email Auth واضبط Site URL على `https://moatazalalqami.online`، وأضف مسارات `/login` للنطاق الأساسي و`www` وalias النشر ضمن Redirect URLs.
+- اضبط `VITE_APP_URL=https://moatazalalqami.online` و`APP_URL=https://moatazalalqami.online`. يحتفظ التدفق بنفس المضيف الذي بدأ OAuth، لذلك يعمل النطاق المخصص وalias النشر دون فقد cookie التحقق.
 - لا تخلط مشاريع Supabase في متغيرات الواجهة: في Production اترك `VITE_SUPABASE_URL` و`VITE_SUPABASE_PUBLISHABLE_KEY` فقط، واحذف القيم القديمة المتعارضة من `NEXT_PUBLIC_*` و`*_ANON_KEY`. اترك `SUPABASE_SERVICE_ROLE_KEY` و`ENCRYPTION_KEY` خادميين فقط.
 - أضف متغيرات `PROVIDER_MAX_RESPONSE_BYTES` و`PROVIDER_MAX_OUTPUT_TOKENS` عند الحاجة ضمن حدود `.env.example`.
 - لا تضع مفاتيح المزودات أو `SUPABASE_SERVICE_ROLE_KEY` أو `ENCRYPTION_KEY` في أي متغير يبدأ بـ `VITE_`.
@@ -143,7 +146,7 @@ npm run check
 1. من **Authentication → Providers** فعّل Google و/أو GitHub وأدخل Client ID وClient Secret.
 2. في Google Cloud Console وGitHub OAuth App استخدم عنوان callback الخاص بمشروع Supabase:
    `https://bsmzknhkzepaqeffrfbc.supabase.co/auth/v1/callback`
-3. من **Authentication → URL Configuration** اضبط Site URL على `https://moatazasaif.vercel.app` وأضف Redirect URL نفسه مع `/login`.
+3. من **Authentication → URL Configuration** اضبط Site URL على `https://moatazalalqami.online` وأضف Redirect URLs التالية كل واحد كسجل مستقل: `https://moatazalalqami.online/login` و`https://www.moatazalalqami.online/login` و`https://moatazasaif.vercel.app/login`.
 4. اطلب تسجيلًا جديدًا بعد التغيير؛ الروابط القديمة التي تحتوي `localhost` لا تتغير بأثر رجعي.
 
 تتحقق الواجهة من حالة المزوّد قبل مغادرة الموقع، لذلك لن تعرض صفحة JSON الخام عند تعطيله. إذا ظهر تنبيه أن المزوّد غير مفعّل، أكمل بيانات OAuth في Supabase أولًا.
@@ -152,7 +155,7 @@ npm run check
 
 - `POST /api/auth/login` و`POST /api/auth/register` يضعان cookies باسم `__Host-moataz-access-token` و`__Host-moataz-refresh-token` في الإنتاج، مع `Secure; HttpOnly; SameSite=Lax; Path=/`.
 - `GET /api/auth/session` يستعيد الجلسة ويجددها عند الحاجة، و`DELETE /api/auth/session` يمسحها. لا تحفظ الواجهة الجلسة في `localStorage`؛ لا يُستخدم `sessionStorage` إلا لمتحقق PKCE القصير.
-- التوجيه الإنتاجي لا يثق بـ preview أو localhost. استخدم `VITE_APP_URL` و`APP_URL` على الأصل الذي يخدم Functions فعلًا. النطاق `www.moatazalalqami.online` الحالي نسخة Sites منفصلة لا تحتوي `/api`; لا تضعه في `APP_URL` حتى تُربطه بنفس مشروع Vercel.
+- التوجيه الإنتاجي لا يثق بـ localhost أو Host عشوائي. النطاق الأساسي و`www` وalias النشر مدرجة صراحةً، ويُحافظ على المضيف نفسه من بداية OAuth حتى إنشاء جلسة HttpOnly.
 
 ### نشر Vercel
 
@@ -167,7 +170,10 @@ npm run check
 - `api/_lib/provider-schemas.ts`, `redaction.ts`, `provider-credentials.ts`
 - `api/_lib/providers/{types,http,openai-compatible,gemini,anthropic}.ts`
 - `src/lib/session-provider.ts`, `local-chat-store.ts`, `chat-api.ts`
+- `src/lib/files-api.ts`, `projects-api.ts`, `code-artifacts.ts`
+- `api/_handlers/files.ts`, `projects.ts`
 - `supabase/migrations/20260714190000_byok_provider_protocol.sql`
+- `supabase/migrations/20260718212100_chat_files_and_projects.sql`
 
 ### Provider Manager والتشخيص الإنتاجي
 

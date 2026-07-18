@@ -71,4 +71,17 @@ describe('native provider adapters', () => {
     for await (const event of openAiCompatibleAdapter.streamText(base, 'model-a', [{ role: 'user', content: 'hi' }])) if (event.event === 'delta') events.push(event.data.content)
     expect(events.join('')).toBe('AB')
   })
+
+  it('uses /v1/chat/completions when a gateway base URL points to its root', async () => {
+    process.env.NODE_ENV = 'test'; process.env.ALLOW_INSECURE_PROVIDER_URLS = 'true'
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === 'http://localhost/chat/completions') return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }], usage: { total_tokens: 2 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await openAiCompatibleAdapter.generateText({ ...base, baseUrl: 'http://localhost' }, 'model-a', [{ role: 'user', content: 'hi' }])
+    expect(result.content).toBe('OK')
+    expect(result.endpoint).toBe('http://localhost/v1/chat/completions')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })

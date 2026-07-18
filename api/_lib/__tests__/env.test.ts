@@ -39,7 +39,7 @@ describe('server environment', () => {
       TELEGRAM_MAX_RESPONSE_CHARACTERS: '16000',
     })
     resetEnvCacheForTests()
-    expect(getTelegramWebhookUrl()).toBe('https://moatazasaif.vercel.app/api/integrations/telegram/webhook')
+    expect(getTelegramWebhookUrl()).toBe('https://moatazalalqami.online/api/integrations/telegram/webhook')
   })
 
   it('ignores a stale localhost APP_URL in production', () => {
@@ -48,7 +48,7 @@ describe('server environment', () => {
       APP_URL: 'http://localhost:3000',
     })
     resetEnvCacheForTests()
-    expect(getTelegramWebhookUrl()).toBe('https://moatazasaif.vercel.app/api/integrations/telegram/webhook')
+    expect(getTelegramWebhookUrl()).toBe('https://moatazalalqami.online/api/integrations/telegram/webhook')
   })
 
   it('keeps provider timeouts below the Vercel function deadline', () => {

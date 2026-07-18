@@ -12,6 +12,7 @@ import {
   XCircle,
   Shield,
   Eraser,
+  KeyRound,
   Search,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -81,6 +82,8 @@ export default function Providers() {
   );
   const [providerQuery, setProviderQuery] = useState("");
   const [providerSort, setProviderSort] = useState<"priority" | "name" | "latency">("priority");
+  const [keyRotationProvider, setKeyRotationProvider] = useState<Provider | null>(null);
+  const [replacementKey, setReplacementKey] = useState("");
 
   const definitions =
     PROVIDER_DEFINITIONS as readonly (typeof PROVIDER_DEFINITIONS)[number][];
@@ -477,6 +480,29 @@ export default function Providers() {
     }
   };
 
+  const rotateProviderKey = async () => {
+    if (!keyRotationProvider || replacementKey.trim().length < 8) {
+      toast.error(tr("أدخل مفتاح API صالحًا", "Enter a valid API key"));
+      return;
+    }
+    setTestingId(`rotate:${keyRotationProvider.id}`);
+    try {
+      await apiJson<{ provider: Provider }>("/api/providers", {
+        method: "PATCH",
+        headers: await authHeaders(),
+        body: JSON.stringify({ id: keyRotationProvider.id, apiKey: replacementKey.trim() }),
+      });
+      setReplacementKey("");
+      setKeyRotationProvider(null);
+      await testSavedProvider(keyRotationProvider);
+      toast.success(tr("تم استبدال المفتاح واختبار الاتصال", "Key replaced and connection verified"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : tr("تعذر استبدال المفتاح", "Could not replace the key"));
+    } finally {
+      setTestingId(null);
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <ProviderOperationsSummary
@@ -591,6 +617,10 @@ export default function Providers() {
                     )
                   }
                   onDelete={() => void deleteProvider(provider.id)}
+                  onRotateKey={() => {
+                    setReplacementKey("");
+                    setKeyRotationProvider(provider);
+                  }}
                   onStart={() => navigate("/chat")}
                   onModelChange={(model) => void updateModel(provider, model)}
                 />
@@ -815,6 +845,26 @@ export default function Providers() {
           </div>
         </div>
       )}
+      {keyRotationProvider && (
+        <div className="modal" onClick={() => setKeyRotationProvider(null)}>
+          <div className="modal-content p-7 max-w-md" role="dialog" aria-modal="true" aria-labelledby="replace-provider-key-title" onClick={(event) => event.stopPropagation()}>
+            <h2 id="replace-provider-key-title" className="text-xl font-semibold mb-2">
+              {tr("استبدال مفتاح المزود", "Replace provider key")}
+            </h2>
+            <p className="text-sm text-dark-400 mb-5">
+              {tr(`سيُشفّر المفتاح الجديد ويُختبر دون إظهار المفتاح السابق — ${keyRotationProvider.name}`, `The new key will be encrypted and tested without exposing the previous key — ${keyRotationProvider.name}`)}
+            </p>
+            <label htmlFor="replacement-provider-key" className="text-sm block mb-1.5">API Key</label>
+            <input id="replacement-provider-key" type="password" autoComplete="new-password" dir="ltr" className="input font-mono" value={replacementKey} onChange={(event) => setReplacementKey(event.target.value)} />
+            <div className="flex gap-3 mt-6">
+              <button className="btn btn-secondary flex-1" onClick={() => setKeyRotationProvider(null)}>{tr("إلغاء", "Cancel")}</button>
+              <button className="btn btn-primary flex-1" disabled={testingId === `rotate:${keyRotationProvider.id}`} onClick={() => void rotateProviderKey()}>
+                <KeyRound size={15} /> {tr("استبدال واختبار", "Replace & test")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -829,6 +879,7 @@ function ProviderCard({
   expanded,
   onExpand,
   onDelete,
+  onRotateKey,
   onStart,
   onModelChange,
 }: {
@@ -840,6 +891,7 @@ function ProviderCard({
   expanded: boolean;
   onExpand: () => void;
   onDelete: () => void;
+  onRotateKey?: () => void;
   onStart: () => void;
   onModelChange: (model: string) => void;
 }) {
@@ -905,6 +957,11 @@ function ProviderCard({
               </>
             )}
           </button>
+          {onRotateKey && (
+            <button onClick={onRotateKey} className="btn btn-ghost p-2" aria-label={tr("استبدال مفتاح API", "Replace API key")} title={tr("استبدال مفتاح API", "Replace API key")}>
+              <KeyRound size={17} />
+            </button>
+          )}
           {onDiscover && <button onClick={onDiscover} disabled={testing} className="btn btn-secondary text-xs px-3 py-2"><Search size={14} /> {tr("اكتشاف النماذج", "Discover models")}</button>}
           {models.length > 0 && (
             <select

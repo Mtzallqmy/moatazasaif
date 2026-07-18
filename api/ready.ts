@@ -15,6 +15,8 @@ import publicApiV1 from './_handlers/public-api-v1.js'
 import apiKeys from './_handlers/api-keys.js'
 import chats from './_handlers/chats.js'
 import providerManager from './_handlers/provider-manager.js'
+import files from './_handlers/files.js'
+import projects from './_handlers/projects.js'
 import { runScheduledProviderHealthChecks } from './_lib/provider-manager.js'
 
 const routedHandlers: Record<string, (req: VercelRequest, res: VercelResponse) => unknown> = {
@@ -30,6 +32,8 @@ const routedHandlers: Record<string, (req: VercelRequest, res: VercelResponse) =
   'api-keys': apiKeys,
   chats,
   'provider-manager': providerManager,
+  files,
+  projects,
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -80,6 +80,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'PATCH') {
       const body = parseRequest(providerPatchSchema, req.body)
       const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
+      if (body.apiKey !== undefined) {
+        update.encrypted_key = encryptSecret(body.apiKey)
+        update.status = 'untested'
+        update.health_status = 'unknown'
+        update.error_message = null
+        update.diagnostic = null
+        update.circuit_state = 'closed'
+        update.circuit_failures = 0
+        update.circuit_opened_at = null
+        update.circuit_next_retry_at = null
+      }
       if (body.model !== undefined) {
         if (!body.model) update.model = null
         else {

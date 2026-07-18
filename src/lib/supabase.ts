@@ -7,6 +7,7 @@ import type {
   Provider,
 } from "../types";
 import { resolveProviderProtocol } from "../../shared/provider-registry";
+import { CHAT_FILE_MIME_TYPES } from "../../shared/file-contract";
 import { apiJson, authHeaders } from "./api";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ||
@@ -115,14 +116,7 @@ export function mapChat(row: any): Chat {
   };
 }
 
-const attachmentMimeTypes = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "text/plain",
-  "text/markdown",
-  "application/json",
-]);
+const attachmentMimeTypes = new Set<string>(CHAT_FILE_MIME_TYPES);
 
 function mapAttachmentMetadata(
   value: unknown,
@@ -145,6 +139,8 @@ function mapAttachmentMetadata(
         ...(typeof row.size === "number" && Number.isFinite(row.size)
           ? { size: row.size }
           : {}),
+        ...(typeof row.fileId === "string" ? { fileId: row.fileId } : {}),
+        ...(typeof row.downloadUrl === "string" && row.downloadUrl.startsWith("/api/files/") ? { downloadUrl: row.downloadUrl } : {}),
       },
     ];
   });

@@ -63,7 +63,7 @@ export default function DeveloperDiagnostics() {
 
   return <div className="p-6 max-w-7xl mx-auto space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-3xl font-semibold">{tr('تشخيص المزودات', 'Provider diagnostics')}</h1><p className="text-dark-400 mt-1">{tr('حالة حقيقية محفوظة في Supabase مع Circuit Breaker وإعادة المحاولة.', 'Durable health state with retries and circuit breakers.')}</p></div>
+      <div><h1 className="text-3xl font-semibold">{tr('تشخيص المزودات', 'Provider diagnostics')}</h1><p className="text-dark-400 mt-1">{tr('حالة تشغيل دائمة مع حماية الدائرة وإعادة المحاولة.', 'Durable health state with retries and circuit breakers.')}</p></div>
       <div className="flex flex-wrap gap-2"><button className="btn btn-secondary" onClick={() => void load()} disabled={loading}><RefreshCw size={16} /> {tr('تحديث', 'Refresh')}</button><button className="btn btn-secondary" onClick={() => void exportLogs('json')}><Download size={16} /> JSON</button><button className="btn btn-secondary" onClick={() => void exportLogs('csv')}><Download size={16} /> CSV</button></div>
     </div>
     <div className="card p-3 flex items-center gap-2"><Search size={17} className="text-dark-400" /><input className="input border-0 bg-transparent" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('ابحث بالاسم أو النوع أو النموذج', 'Search name, type or model')} /></div>

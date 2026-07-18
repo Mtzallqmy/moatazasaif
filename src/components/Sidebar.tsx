@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { MessageCircle, LayoutDashboard, Bot, Plug, Settings, LogOut, X, Plus, Users, Newspaper, Palette, Activity } from 'lucide-react'
+import { MessageCircle, LayoutDashboard, Bot, Plug, Settings, LogOut, X, Plus, Users, Newspaper, Palette, Activity, FolderKanban } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
 import { usePreferences } from '../contexts/PreferencesContext'
@@ -17,6 +17,7 @@ export default function Sidebar({ onClose, onLogout }: SidebarProps) {
   const navItems = [
     ...(MANAGEMENT_ROLES.includes(user?.role || 'user') ? [{ to: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') }] : []),
     { to: '/chat', icon: MessageCircle, label: t('nav.chat') },
+    { to: '/projects', icon: FolderKanban, label: tr('المشاريع', 'Projects') },
     { to: '/providers', icon: Bot, label: t('nav.providers') },
     ...(INTEGRATION_ROLES.includes(user?.role || 'user') ? [{ to: '/integrations', icon: Plug, label: t('nav.integrations') }] : []),
     ...(['owner', 'admin', 'manager'].includes(user?.role || 'user') ? [{ to: '/developer/diagnostics', icon: Activity, label: tr('تشخيص المطور', 'Developer diagnostics') }] : []),

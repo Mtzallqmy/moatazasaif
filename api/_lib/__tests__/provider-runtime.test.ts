@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inferProtocol, isPrivateIpAddress, providerBaseUrl, sanitizeProviderEndpoint } from '../provider-runtime.js'
+import { classifyProviderError, inferProtocol, isPrivateIpAddress, providerBaseUrl, sanitizeProviderEndpoint } from '../provider-runtime.js'
 
 describe('provider runtime', () => {
   it('detects native protocols', () => {
@@ -23,5 +23,11 @@ describe('provider runtime', () => {
     expect(isPrivateIpAddress('172.20.1.1')).toBe(true)
     expect(isPrivateIpAddress('192.168.1.1')).toBe(true)
     expect(isPrivateIpAddress('8.8.8.8')).toBe(false)
+  })
+
+  it('classifies payment and quota responses separately from authentication failures', () => {
+    expect(classifyProviderError({ status: 402, message: 'Payment Required', code: 'payment_required', protocol: 'openai-compatible' })).toMatchObject({ category: 'quota' })
+    expect(classifyProviderError({ status: 400, message: 'Insufficient credit', code: 'insufficient_quota', protocol: 'openai-compatible' })).toMatchObject({ category: 'quota' })
+    expect(classifyProviderError({ status: 401, message: 'Invalid API key', code: 'invalid_api_key', protocol: 'openai-compatible' })).toMatchObject({ category: 'authentication' })
   })
 })

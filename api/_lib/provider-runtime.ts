@@ -184,8 +184,9 @@ export function classifyProviderError(error: NormalizedProviderError): Pick<Prov
   if (!status) return { category: 'network', code: error.code || 'network_error', hint: 'تحقق من Base URL وDNS وشهادة TLS واتصال المزود.' }
   if (status === 401) return { category: 'authentication', code: error.code || 'unauthorized', hint: 'المفتاح غير صحيح أو منتهي أو أُرسل إلى بوابة غير مناسبة.' }
   if (status === 403) return { category: 'authorization', code: error.code || 'forbidden', hint: 'المفتاح لا يملك الإذن المطلوب للنموذج أو المؤسسة أو البوابة.' }
-  if (status === 429 && (code.includes('quota') || message.includes('quota') || message.includes('credit') || message.includes('billing') || message.includes('balance'))) {
-    return { category: 'quota', code: error.code || 'quota_exceeded', hint: 'راجع الرصيد أو الحصة وحدود الفوترة لدى المزود.' }
+  const billingSignal = code.includes('quota') || code.includes('credit') || code.includes('billing') || code.includes('payment') || message.includes('quota') || message.includes('credit') || message.includes('billing') || message.includes('payment required') || message.includes('insufficient funds')
+  if (status === 402 || (billingSignal && [400, 403, 429].includes(status || 0))) {
+    return { category: 'quota', code: error.code || 'quota_exceeded', hint: 'راجع الرصيد أو الحصة وحدود الفوترة لدى المزود. بعض النماذج المجانية تتطلب تفعيل الفوترة أو حدًا أدنى من الرصيد.' }
   }
   if (status === 429) return { category: 'rate_limit', code: error.code || 'rate_limited', hint: 'تم تجاوز حد الطلبات؛ انتظر ثم أعد المحاولة.' }
   if (status === 404 && (message.includes('model') || code.includes('model'))) return { category: 'model', code: error.code || 'model_not_found', hint: 'اختر نموذجًا موجودًا ومتاحًا لهذا المفتاح.' }

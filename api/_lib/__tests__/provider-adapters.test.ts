@@ -72,6 +72,42 @@ describe('native provider adapters', () => {
     expect(events.join('')).toBe('AB')
   })
 
+  it('retries with a minimal standards-compatible body when a model rejects optional tuning fields', async () => {
+    process.env.NODE_ENV = 'test'; process.env.ALLOW_INSECURE_PROVIDER_URLS = 'true'
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.temperature !== undefined || body.stream_options !== undefined) {
+        return new Response(JSON.stringify({ error: { message: 'unsupported option', code: 'invalid_request' } }), { status: 400, headers: { 'content-type': 'application/json' } })
+      }
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"works"}}]}\n\n'))
+          controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
+          controller.close()
+        },
+      }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const content: string[] = []
+    for await (const event of openAiCompatibleAdapter.streamText(base, 'strict-model', [{ role: 'user', content: 'hi' }])) {
+      if (event.event === 'delta') content.push(event.data.content)
+    }
+    expect(content.join('')).toBe('works')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('normalizes a JSON completion when an OpenAI-compatible gateway ignores stream mode', async () => {
+    process.env.NODE_ENV = 'test'; process.env.ALLOW_INSECURE_PROVIDER_URLS = 'true'
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: [{ type: 'text', text: 'JSON fallback' }] } }],
+      usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+    const events = []
+    for await (const event of openAiCompatibleAdapter.streamText(base, 'json-model', [{ role: 'user', content: 'hi' }])) events.push(event)
+    expect(events.find((event) => event.event === 'delta')?.data).toEqual({ content: 'JSON fallback' })
+    expect(events.at(-1)?.event).toBe('done')
+  })
+
   it('uses /v1/chat/completions when a gateway base URL points to its root', async () => {
     process.env.NODE_ENV = 'test'; process.env.ALLOW_INSECURE_PROVIDER_URLS = 'true'
     const fetchMock = vi.fn(async (url: string) => {

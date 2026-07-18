@@ -60,6 +60,8 @@ describe('POST /api/chat session mode', () => {
     expect(state.statusCode).toBe(200)
     expect(state.ended).toBe(true)
     expect(state.chunks.join('')).toContain('event: delta')
+    expect(state.chunks.join('')).toContain('event: status')
+    expect(state.headers['X-Request-Id']).toBeTruthy()
     expect(state.chunks.join('')).toContain('"content":"hello"')
     expect(state.chunks.join('')).toContain('event: done')
     expect(state.chunks.join('')).not.toContain('temporary-secret-key')

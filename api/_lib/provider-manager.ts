@@ -113,7 +113,7 @@ export function isRetryableProviderError(error: unknown) {
 export function providerTimeoutMs(value?: number) {
   const fallback = getProviderRuntimeEnv().PROVIDER_TIMEOUT_MS
   const timeout = Number.isFinite(value) ? Number(value) : fallback
-  return Math.max(5_000, Math.min(55_000, Math.round(timeout)))
+  return Math.max(5_000, Math.min(45_000, Math.round(timeout)))
 }
 
 function providerAttemptSignal(parent: AbortSignal | undefined, timeoutMs: number) {
@@ -122,7 +122,7 @@ function providerAttemptSignal(parent: AbortSignal | undefined, timeoutMs: numbe
 }
 
 async function waitForRetry(delayMs: number, signal?: AbortSignal) {
-  if (signal?.aborted) throw new DOMException('تم إيقاف الطلب', 'AbortError')
+  if (signal?.aborted) throw signal.reason || new DOMException('تم إيقاف الطلب', 'AbortError')
   await new Promise<void>((resolve, reject) => {
     const done = () => {
       signal?.removeEventListener('abort', aborted)
@@ -131,7 +131,7 @@ async function waitForRetry(delayMs: number, signal?: AbortSignal) {
     const aborted = () => {
       clearTimeout(timer)
       signal?.removeEventListener('abort', aborted)
-      reject(new DOMException('تم إيقاف الطلب', 'AbortError'))
+      reject(signal?.reason || new DOMException('تم إيقاف الطلب', 'AbortError'))
     }
     const timer = setTimeout(done, delayMs)
     signal?.addEventListener('abort', aborted, { once: true })
@@ -142,7 +142,7 @@ export async function withProviderRetry<T>(operation: (signal: AbortSignal) => P
   const retries = Math.max(0, Math.min(5, options.retries ?? 2))
   let lastError: unknown
   for (let attempt = 0; attempt <= retries; attempt += 1) {
-    if (options.signal?.aborted) throw new DOMException('تم إيقاف الطلب', 'AbortError')
+    if (options.signal?.aborted) throw options.signal.reason || new DOMException('تم إيقاف الطلب', 'AbortError')
     try {
       return await operation(providerAttemptSignal(options.signal, providerTimeoutMs(options.timeoutMs)))
     } catch (error) {
@@ -183,7 +183,7 @@ function managerRecord(row: Record<string, unknown>): ProviderManagerRecord {
     is_enabled: row.is_enabled !== false,
     models: Array.isArray(row.models) ? row.models.filter((model): model is string => typeof model === 'string') : [],
     priority: Number(row.priority ?? 100),
-    timeout_ms: Number(row.timeout_ms ?? 45_000),
+    timeout_ms: Number(row.timeout_ms ?? 35_000),
     retries: Number(row.retries ?? 2),
     max_connections: Number(row.max_connections ?? 4),
     health_status: (row.health_status || 'unknown') as ProviderHealthStatus,
@@ -351,7 +351,7 @@ export async function* streamProviderRetry<T>(provider: ProviderManagerRecord, o
   let lastError: unknown
   const retries = Math.max(0, Math.min(5, provider.retries ?? 2))
   for (let attempt = 0; attempt <= retries; attempt += 1) {
-    if (signal?.aborted) throw new DOMException('تم إيقاف الطلب', 'AbortError')
+    if (signal?.aborted) throw signal.reason || new DOMException('تم إيقاف الطلب', 'AbortError')
     let yielded = false
     try {
       for await (const event of operation(providerAttemptSignal(signal, provider.timeout_ms))) { yielded = true; yield event }

@@ -63,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     getServerEnv()
     const admin = getAdminClient()
-    const [{ error: profileError }, { error: rateLimitError }] = await Promise.all([
+    const checks = await Promise.all([
       admin.from('profiles').select('id', { head: true, count: 'exact' }).limit(1),
       admin.rpc('consume_api_rate_limit', {
         p_key_hash: '0'.repeat(64),
@@ -71,12 +71,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         p_limit: 100000,
         p_window_seconds: 60,
       }).single(),
+      admin.from('providers').select('id,availability,capabilities', { head: true, count: 'exact' }).limit(1),
+      admin.from('provider_manager_logs').select('id', { head: true, count: 'exact' }).limit(1),
+      admin.from('chat_files').select('id', { head: true, count: 'exact' }).limit(1),
+      admin.from('projects').select('id', { head: true, count: 'exact' }).limit(1),
     ])
-    if (profileError) throw profileError
-    if (rateLimitError) throw rateLimitError
+    const failed = checks.find((check) => check.error)
+    if (failed?.error) throw failed.error
     return res.status(200).json({ status: 'ready', timestamp: new Date().toISOString() })
   } catch (error) {
     logTechnicalError('[readiness-failed]', error)
-    return res.status(503).json({ status: 'not_ready', timestamp: new Date().toISOString() })
+    return res.status(503).json({ status: 'not_ready', code: 'database_dependency_unavailable', timestamp: new Date().toISOString() })
   }
 }

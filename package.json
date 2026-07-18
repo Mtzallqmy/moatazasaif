@@ -14,10 +14,10 @@
     "check": "npm run lint && npm run typecheck && npm run typecheck:api && npm run test && npm run build"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.3",
+    "@supabase/supabase-js": "2.110.7",
     "@vercel/functions": "3.7.5",
     "clsx": "^2.1.1",
-    "fflate": "0.8.2",
+    "fflate": "0.8.3",
     "framer-motion": "^11.3.0",
     "lucide-react": "^0.400.0",
     "react": "^18.3.1",

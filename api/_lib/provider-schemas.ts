@@ -67,7 +67,7 @@ export const providerPatchSchema = z.object({
   protocol: providerProtocolSchema.optional(),
   isEnabled: z.boolean().optional(),
   priority: z.number().int().min(0).max(100_000).optional(),
-  timeout: z.number().int().min(5_000).max(55_000).optional(),
+  timeout: z.number().int().min(5_000).max(45_000).optional(),
   retries: z.number().int().min(0).max(5).optional(),
   maxConnections: z.number().int().min(1).max(100).optional(),
   tags: z.array(trimmed(40)).max(50).optional(),

@@ -44,7 +44,7 @@ describe('provider manager policies', () => {
 
   it('bounds provider timeouts and only fails over before streamed content starts', () => {
     expect(providerTimeoutMs(500)).toBe(5_000)
-    expect(providerTimeoutMs(90_000)).toBe(55_000)
+    expect(providerTimeoutMs(90_000)).toBe(45_000)
     expect(shouldFailOverProviderStream({ savedCredentials: true, sentProviderOutput: false, sentDone: false })).toBe(true)
     expect(shouldFailOverProviderStream({ savedCredentials: true, sentProviderOutput: true, sentDone: false })).toBe(false)
     expect(shouldFailOverProviderStream({ savedCredentials: false, sentProviderOutput: false, sentDone: false })).toBe(false)

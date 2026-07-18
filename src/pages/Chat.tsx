@@ -3,29 +3,20 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
-  type DragEvent,
 } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  ArrowDown,
   Bot,
-  ChevronDown,
+  CircleAlert,
   Eraser,
-  FileText,
   History,
-  Image as ImageIcon,
-  Paperclip,
   Plus,
+  RefreshCw,
   Search,
-  Send,
   Shield,
-  Square,
   Trash2,
-  UploadCloud,
-  X,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { usePreferences } from "../contexts/PreferencesContext";
@@ -46,7 +37,7 @@ import {
 } from "../lib/supabase";
 import { apiJson, authHeaders } from "../lib/api";
 import { generateId } from "../lib/utils";
-import { streamChat } from "../lib/chat-api";
+import { ChatStreamError, streamChat, type StreamClientEvent } from "../lib/chat-api";
 import {
   clearSessionData,
   getSessionProvider,
@@ -65,6 +56,9 @@ import { deleteChatFile, uploadChatAttachments } from "../lib/files-api";
 import AiMessageContent from "../components/chat/AiMessageContent";
 import type { CodeArtifact } from "../lib/code-artifacts";
 import { createProject, importProjectArtifacts } from "../lib/projects-api";
+import { ChatComposer } from "../components/chat/ChatComposer";
+import { ChatMessage } from "../components/chat/ChatMessage";
+import { ChatProviderControls } from "../components/chat/ChatProviderControls";
 import {
   CHAT_FILE_MIME_TYPES,
   MAX_CHAT_FILE_BYTES,
@@ -124,14 +118,6 @@ function readAsDataUrl(file: File) {
   });
 }
 
-function formatAttachmentSize(bytes: number) {
-  return bytes < 1024
-    ? `${bytes} B`
-    : bytes < 1024 * 1024
-      ? `${Math.ceil(bytes / 1024)} KB`
-      : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 async function loadSavedProviders(): Promise<Provider[]> {
   const body = await apiJson<{ providers: Provider[] }>("/api/providers", {
     headers: await authHeaders(false),
@@ -174,17 +160,24 @@ export default function Chat() {
   const [selectedModel, setSelectedModel] = useState("");
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [streamStatus, setStreamStatus] = useState<"connecting" | "thinking" | "writing">("connecting");
+  const [generationError, setGenerationError] = useState<{
+    message: string;
+    code?: string;
+    category?: string;
+    requestId?: string;
+    attachments: ChatAttachment[];
+  } | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const shouldFollowStreamRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const creatingRef = useRef(false);
-  const dragDepthRef = useRef(0);
 
   const allChats = useMemo(
     () =>
@@ -331,14 +324,12 @@ export default function Chat() {
   }, [chatId, loading, allChats, providers, sessionProvider, user]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingContent]);
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
-    }
-  }, [input]);
+    if (!shouldFollowStreamRef.current) return;
+    messagesEndRef.current?.scrollIntoView({
+      behavior: streamingContent ? "auto" : "smooth",
+      block: "end",
+    });
+  }, [messages, streamingContent, generationError]);
 
   async function createCurrentChat(provider: ActiveProvider, model: string) {
     if (provider.id === "session") {
@@ -376,6 +367,7 @@ export default function Chat() {
           : "saved";
     setSelectedProvider(provider);
     setSelectedModel(model);
+    setGenerationError(null);
     if (
       currentChat &&
       (currentChat.credentialMode !== credentialMode ||
@@ -394,6 +386,36 @@ export default function Chat() {
               ),
         );
       }
+    }
+  };
+
+  const selectModel = async (model: string) => {
+    if (!model || model === selectedModel) return;
+    setSelectedModel(model);
+    setGenerationError(null);
+    if (!currentChat) return;
+
+    try {
+      let updated: ChatType | null = null;
+      if (currentChat.credentialMode === "session") {
+        updated = await updateLocalChat(currentChat.id, { model });
+        setLocalChats((current) =>
+          current.map((chat) => (chat.id === updated?.id ? updated : chat)),
+        );
+      } else if (user) {
+        updated = await updateChat(currentChat.id, user.id, { model });
+        setSavedChats((current) =>
+          current.map((chat) => (chat.id === updated?.id ? updated : chat)),
+        );
+      }
+      if (updated) setCurrentChat(updated);
+    } catch (error) {
+      setSelectedModel(currentChat.model);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : tr("تعذر تغيير النموذج", "Could not change the model"),
+      );
     }
   };
 
@@ -441,6 +463,93 @@ export default function Chat() {
     }
   };
 
+  const requestAssistant = async (
+    conversation: Message[],
+    inlineAttachments: ChatAttachment[],
+    credentialMode: ChatType["credentialMode"],
+    chatRecord: ChatType = currentChat as ChatType,
+  ) => {
+    if (!chatRecord || !selectedProvider) throw new Error("chat_not_ready");
+    const isSession = credentialMode === "session";
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStreamStatus("connecting");
+    const result = await streamChat({
+      credentialMode,
+      providerId: credentialMode === "saved" ? selectedProvider.id : undefined,
+      sessionProvider: isSession ? sessionProvider || undefined : undefined,
+      model: selectedModel,
+      messages: conversation.map((message, index) => ({
+        role: message.role === "tool" ? "assistant" : message.role,
+        content: message.content,
+        ...(index === conversation.length - 1 && inlineAttachments.length
+          ? { attachments: inlineAttachments }
+          : {}),
+      })),
+      signal: controller.signal,
+      onContent: (content) => {
+        setStreamStatus("writing");
+        setStreamingContent(content);
+      },
+      onEvent: (event: StreamClientEvent) => {
+        if (event.event === "status" || event.event === "meta") {
+          setStreamStatus("thinking");
+        }
+      },
+    });
+    const assistant: Message = {
+      id: generateId(),
+      chatId: chatRecord.id,
+      role: "assistant",
+      content: result.content,
+      createdAt: new Date().toISOString(),
+      model: result.meta?.data.model || selectedModel,
+      tokens: result.tokens,
+    };
+    if (isSession) await insertLocalMessage(assistant);
+    else if (user) await insertMessage(assistant, user.id);
+
+    const completeConversation = [...conversation, assistant];
+    setMessages(completeConversation);
+    setStreamingContent("");
+    let updatedChat = chatRecord;
+    if (isSession) {
+      updatedChat = await updateLocalChat(chatRecord.id, {
+        messageCount: completeConversation.length,
+      });
+      setLocalChats((current) =>
+        current.map((chat) => (chat.id === updatedChat.id ? updatedChat : chat)),
+      );
+    } else if (user) {
+      updatedChat =
+        (await updateChat(chatRecord.id, user.id, {
+          message_count: completeConversation.length,
+        })) || chatRecord;
+      setSavedChats((current) =>
+        current.map((chat) => (chat.id === updatedChat.id ? updatedChat : chat)),
+      );
+    }
+    setCurrentChat(updatedChat);
+    setGenerationError(null);
+    if (credentialMode === "platform") {
+      void loadPlatformProvider()
+        .then((result) => setPlatformUsage(result.usage))
+        .catch(() => undefined);
+    }
+  };
+
+  const streamFailure = (error: unknown, inlineAttachments: ChatAttachment[]) => {
+    const fallback = tr("فشل استدعاء النموذج", "Model request failed");
+    const details = error instanceof ChatStreamError ? error : null;
+    setGenerationError({
+      message: error instanceof Error ? error.message : fallback,
+      code: details?.code,
+      category: details?.category,
+      requestId: details?.requestId,
+      attachments: inlineAttachments,
+    });
+  };
+
   const sendMessage = async () => {
     if (
       !currentChat ||
@@ -482,6 +591,8 @@ export default function Chat() {
     const submittedAttachments = attachments;
     setIsStreaming(true);
     setStreamingContent("");
+    setGenerationError(null);
+    shouldFollowStreamRef.current = true;
     const isSession = credentialMode === "session";
     const messageId = generateId();
     let uploadedFileIds: string[] = [];
@@ -544,70 +655,47 @@ export default function Chat() {
             prev.map((item) => (item.id === chat.id ? chat : item)),
           );
       }
-      const controller = new AbortController();
-      abortRef.current = controller;
-      const result = await streamChat({
-        credentialMode,
-        providerId:
-          credentialMode === "saved" ? selectedProvider.id : undefined,
-        sessionProvider: isSession ? sessionProvider || undefined : undefined,
-        model: selectedModel,
-        messages: nextMessages.map((message, index) => ({
-          role: message.role === "tool" ? "assistant" : message.role,
-          content: message.content,
-          ...(index === nextMessages.length - 1 && submittedAttachments.length
-            ? { attachments: submittedAttachments }
-            : {}),
-        })),
-        signal: controller.signal,
-        onContent: setStreamingContent,
-      });
-      const assistant: Message = {
-        id: generateId(),
-        chatId: currentChat.id,
-        role: "assistant",
-        content: result.content,
-        createdAt: new Date().toISOString(),
-        model: selectedModel,
-        tokens: result.tokens,
-      };
-      if (isSession) await insertLocalMessage(assistant);
-      else if (user) await insertMessage(assistant, user.id);
-      const all = [...nextMessages, assistant];
-      setMessages(all);
-      setStreamingContent("");
-      if (isSession) {
-        chat = await updateLocalChat(currentChat.id, {
-          messageCount: all.length,
-        });
-        setLocalChats((prev) =>
-          prev.map((item) => (item.id === chat.id ? chat : item)),
-        );
-      } else if (user) {
-        chat =
-          (await updateChat(currentChat.id, user.id, {
-            message_count: all.length,
-          })) || currentChat;
-        setSavedChats((prev) =>
-          prev.map((item) => (item.id === chat.id ? chat : item)),
-        );
-      }
-      setCurrentChat(chat);
-      if (credentialMode === "platform") {
-        void loadPlatformProvider()
-          .then((result) => setPlatformUsage(result.usage))
-          .catch(() => undefined);
-      }
+      await requestAssistant(nextMessages, submittedAttachments, credentialMode, chat);
     } catch (error) {
       if (!messageSaved && uploadedFileIds.length) {
         await Promise.allSettled(uploadedFileIds.map((fileId) => deleteChatFile(fileId)));
       }
-      if (!(error instanceof DOMException && error.name === "AbortError"))
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (messageSaved) streamFailure(error, submittedAttachments);
         toast.error(
           error instanceof Error
             ? error.message
             : tr("فشل استدعاء النموذج", "Model request failed"),
         );
+      }
+    } finally {
+      abortRef.current = null;
+      setIsStreaming(false);
+      setStreamingContent("");
+    }
+  };
+
+  const retryGeneration = async () => {
+    if (!generationError || !currentChat || !selectedProvider || !messages.length || isStreaming) return;
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role !== "user") return;
+    const credentialMode =
+      selectedProvider.id === "session"
+        ? "session"
+        : selectedProvider.credentialMode === "platform"
+          ? "platform"
+          : "saved";
+    setIsStreaming(true);
+    setStreamingContent("");
+    setGenerationError(null);
+    shouldFollowStreamRef.current = true;
+    try {
+      await requestAssistant(messages, generationError.attachments, credentialMode, currentChat);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        streamFailure(error, generationError.attachments);
+        toast.error(error instanceof Error ? error.message : tr("فشل إعادة المحاولة", "Retry failed"));
+      }
     } finally {
       abortRef.current = null;
       setIsStreaming(false);
@@ -745,37 +833,6 @@ export default function Chat() {
     setAttachments(next);
   };
 
-  const onFileInput = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    event.target.value = "";
-    void addAttachments(files);
-  };
-
-  const onDragEnter = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    if (!event.dataTransfer.types.includes("Files")) return;
-    dragDepthRef.current += 1;
-    setIsDraggingFiles(true);
-  };
-
-  const onDragOver = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  };
-
-  const onDragLeave = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setIsDraggingFiles(false);
-  };
-
-  const onDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    dragDepthRef.current = 0;
-    setIsDraggingFiles(false);
-    void addAttachments(Array.from(event.dataTransfer.files));
-  };
-
   const filteredChats = allChats.filter((chat) =>
     chat.title.toLowerCase().includes(searchTerm.toLowerCase()),
   );
@@ -783,15 +840,34 @@ export default function Chat() {
     language === "ar" ? "ar-SA" : "en-US",
     { month: "short", day: "numeric" },
   );
-  const attachmentBytes = attachments.reduce(
-    (total, attachment) => total + (attachment.size || 0),
-    0,
+  const timeFormatter = new Intl.DateTimeFormat(
+    language === "ar" ? "ar-SA" : "en-US",
+    { hour: "numeric", minute: "2-digit" },
   );
+  const onTranscriptScroll = () => {
+    const transcript = transcriptRef.current;
+    if (!transcript) return;
+    const distance = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight;
+    const nearBottom = distance < 140;
+    shouldFollowStreamRef.current = nearBottom;
+    setShowScrollButton(!nearBottom);
+  };
+  const scrollToLatest = () => {
+    shouldFollowStreamRef.current = true;
+    setShowScrollButton(false);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  };
+  const streamingLabel =
+    streamStatus === "connecting"
+      ? tr("جارٍ الاتصال بالمزود…", "Connecting to provider…")
+      : streamStatus === "thinking"
+        ? tr("تم الاتصال، جارٍ تجهيز الإجابة…", "Connected, preparing the answer…")
+        : tr("جارٍ كتابة الإجابة…", "Writing the answer…");
 
   return (
-    <div className="app-canvas flex h-[calc(100dvh-4rem)] min-h-[28rem] overflow-hidden">
+    <div className="chat-shell app-canvas">
       <aside
-        className="w-72 border-e border-dark-200 dark:border-dark-700 bg-white dark:bg-dark-900 flex-col hidden lg:flex"
+        className="chat-history-panel"
         aria-label={tr("قائمة المحادثات", "Chat list")}
       >
         <div className="p-4 border-b border-dark-200 dark:border-dark-700 flex items-center justify-between">
@@ -874,8 +950,8 @@ export default function Chat() {
               )}
         </div>
       </aside>
-      <div className="flex-1 flex flex-col min-w-0">
-        <div className="min-h-14 border-b border-dark-200 dark:border-dark-700 px-3 sm:px-5 py-2 flex items-center justify-between bg-white dark:bg-dark-900 flex-shrink-0 gap-2 sm:gap-3">
+      <section className="chat-workspace">
+        <header className="chat-workspace-header">
           <div className="min-w-0">
             <div className="font-semibold text-lg truncate">
               {currentChat?.title || tr("محادثة جديدة", "New chat")}
@@ -886,7 +962,7 @@ export default function Chat() {
               {selectedProvider?.protocol || "—"}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="chat-header-actions">
             <details className="relative lg:hidden">
               <summary
                 className="icon-button h-10 w-10 list-none cursor-pointer"
@@ -927,82 +1003,17 @@ export default function Chat() {
             >
               <Plus size={18} />
             </button>
-            <div className="hidden sm:flex items-center bg-dark-100 dark:bg-dark-800 rounded-2xl p-1 text-xs">
-              <button
-                type="button"
-                className="px-3 py-1.5 rounded-xl bg-white text-dark-950"
-              >
-                {tr("دردشة", "Chat")}
-              </button>
-              <button
-                type="button"
-                disabled
-                title={tr(
-                  "سيُفعّل بعد إضافة Agent Loop آمن",
-                  "Available after a secure agent loop is added",
-                )}
-                className="px-3 py-1.5 rounded-xl text-dark-500 dark:text-dark-600"
-              >
-                {tr("وكيل قريبًا", "Agent soon")}
-              </button>
-            </div>
-            <div className="relative group">
-              <button
-                className="flex items-center gap-2 text-sm px-3 py-2 max-w-[9.5rem] sm:max-w-none bg-dark-100 dark:bg-dark-800 rounded-2xl border border-dark-200 dark:border-dark-700"
-                aria-haspopup="listbox"
-                aria-label={tr("اختيار المزود", "Select provider")}
-              >
-                <span className="truncate">
-                  {selectedProvider?.name || tr("اختر مزود", "Select provider")}
-                </span>
-                <ChevronDown size={14} />
-              </button>
-              <div
-                className="absolute end-0 mt-2 w-[min(18rem,calc(100vw-1.5rem))] bg-white dark:bg-dark-900 border border-dark-200 dark:border-dark-700 rounded-2xl shadow-2xl py-1 z-50 hidden group-hover:block group-focus-within:block"
-                role="listbox"
-                aria-label={tr("المزودون المتاحون", "Available providers")}
-              >
-                {availableProviders.map((provider) => (
-                  <button
-                    key={provider.id}
-                    onClick={() => void selectProvider(provider)}
-                    className="w-full text-start px-4 py-2.5 hover:bg-dark-100 dark:hover:bg-dark-800 cursor-pointer text-sm flex justify-between"
-                    role="option"
-                    aria-selected={selectedProvider?.id === provider.id}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate">{provider.name}</span>
-                      {provider.credentialMode === "platform" &&
-                        platformUsage && (
-                          <span className="block text-[10px] text-dark-500 mt-0.5">
-                            {tr(
-                              `${platformUsage.requestsUsed} من ${platformUsage.requestsLimit} طلب اليوم`,
-                              `${platformUsage.requestsUsed} of ${platformUsage.requestsLimit} requests today`,
-                            )}
-                          </span>
-                        )}
-                    </span>
-                    <span className="text-[10px] text-emerald-400">
-                      {provider.id === "session"
-                        ? tr("جلسة", "Session")
-                        : provider.status === "connected"
-                          ? tr("متصل", "Connected")
-                          : provider.status}
-                    </span>
-                  </button>
-                ))}
-                {availableProviders.length === 0 && (
-                  <div className="px-4 py-3 text-xs text-dark-500">
-                    {tr(
-                      "أضف مزودًا من صفحة المزودات",
-                      "Add a provider from the Providers page",
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
-        </div>
+          <ChatProviderControls
+            providers={availableProviders}
+            selectedProvider={selectedProvider}
+            selectedModel={selectedModel}
+            platformUsage={platformUsage}
+            onProviderChange={selectProvider}
+            onModelChange={selectModel}
+            tr={tr}
+          />
+        </header>
         {!user && (
           <div className="px-3 sm:px-5 py-2 bg-primary-500/10 border-b border-primary-500/20 text-xs text-primary-700 dark:text-primary-200 flex items-center gap-2">
             <Shield size={14} />{" "}
@@ -1035,286 +1046,114 @@ export default function Chat() {
             </Link>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-5 sm:space-y-6 bg-transparent">
-          {messages.length === 0 && !isStreaming && (
-            <div className="h-full flex flex-col items-center justify-center text-center">
-              <Bot className="text-primary-400 mb-4" size={40} />
-              <h3 className="text-2xl font-semibold mb-2">
-                {tr("كيف يمكنني مساعدتك اليوم؟", "How can I help today?")}
-              </h3>
-              <p className="text-dark-400 mb-5">
-                {selectedProvider
-                  ? tr(
-                      "اكتب رسالة أو أرفق صورة أو ملفًا نصيًا للبدء.",
-                      "Type a message or attach an image or text file to begin.",
-                    )
-                  : tr(
-                      "اختر مزودًا اختبرته فعليًا ثم ابدأ محادثة حقيقية.",
-                      "Select a provider you have verified, then start a live conversation.",
-                    )}
-              </p>
-              {!selectedProvider && (
-                <Link to="/providers" className="btn btn-primary">
-                  {tr("إضافة واختبار مزود", "Add and verify a provider")}
-                </Link>
-              )}
-            </div>
-          )}
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`message-bubble ${message.role === "user" ? "user-message" : "assistant-message"}`}
-              >
-                {message.role === "assistant" && (
-                  <div className="flex items-center gap-2 text-xs text-dark-400 mb-2">
-                    <Bot size={14} /> {message.model || selectedModel}
-                  </div>
-                )}
-                <MessageAttachments
-                  attachments={message.attachments}
-                  isUser={message.role === "user"}
-                  tr={tr}
-                />
-                {message.role === "assistant" ? (
-                  <AiMessageContent content={message.content} canSaveProject={Boolean(user)} onSaveProject={(items) => void saveArtifactsAsProject(items)} />
-                ) : (
-                  <div className="prose prose-sm max-w-none prose-invert"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>
-                )}
-                {message.tokens ? (
-                  <div className="text-[10px] text-dark-500 mt-2">
-                    {message.tokens} {tr("رمز", "tokens")}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ))}
-          {isStreaming && (
-            <div className="flex justify-start" aria-live="polite">
-              <div className="message-bubble assistant-message">
-                <div className="text-xs text-dark-400 mb-2">
-                  <Bot size={14} className="inline" /> {selectedModel} {"•"}{" "}
-                  {tr("يكتب...", "Writing...")}
-                </div>
-                <div className="prose dark:prose-invert prose-sm">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {streamingContent || tr("جارٍ التفكير...", "Thinking...")}
-                  </ReactMarkdown>
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-        <div
-          className={`relative border-t p-3 sm:p-4 bg-white dark:bg-dark-900 flex-shrink-0 transition-colors ${isDraggingFiles ? "border-primary-500 bg-primary-50 dark:bg-primary-950/30" : "border-dark-200 dark:border-dark-700"}`}
-          onDragEnter={onDragEnter}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-        >
-          {isDraggingFiles && (
-            <div
-              className="absolute inset-2 z-20 rounded-2xl border-2 border-dashed border-primary-500 bg-primary-50/95 dark:bg-primary-950/95 text-primary-700 dark:text-primary-200 flex items-center justify-center gap-2 pointer-events-none"
-              role="status"
-            >
-              <UploadCloud size={22} />
-              <span className="font-medium">
-                {tr("أفلت الملفات هنا", "Drop files here")}
-              </span>
-            </div>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept={ATTACHMENT_ACCEPT}
-            onChange={onFileInput}
-            className="sr-only"
-            tabIndex={-1}
-          />
-          <div className="max-w-4xl mx-auto">
-            {attachments.length > 0 && (
-              <div
-                className="mb-3"
-                aria-label={tr("المرفقات الجاهزة", "Pending attachments")}
-              >
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {attachments.map((attachment, index) => {
-                    const name = attachment.name || tr("مرفق", "Attachment");
-                    return (
-                      <div
-                        key={`${name}-${index}`}
-                        className="relative min-w-44 max-w-56 rounded-xl border border-dark-200 dark:border-dark-700 bg-dark-50 dark:bg-dark-800 p-2 flex items-center gap-2"
-                      >
-                        {attachment.type === "image" ? (
-                          <img
-                            src={attachment.dataUrl}
-                            alt=""
-                            className="w-10 h-10 rounded-lg object-cover shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-lg bg-primary-500/10 text-primary-600 dark:text-primary-300 grid place-items-center shrink-0">
-                            <FileText size={18} />
-                          </div>
+        <div className="chat-transcript-shell">
+          <div ref={transcriptRef} className="chat-transcript" onScroll={onTranscriptScroll}>
+            <div className="chat-transcript-inner">
+              {messages.length === 0 && !isStreaming ? (
+                <div className="chat-empty-state">
+                  <span className="chat-empty-icon"><Bot size={28} /></span>
+                  <h2>{tr("مساحة عمل ذكية وواضحة", "A clear AI workspace")}</h2>
+                  <p>
+                    {selectedProvider
+                      ? tr(
+                          "ابدأ بسؤال، أو أرفق صورة أو ملفًا نصيًا أو برمجيًا لتحليله.",
+                          "Ask a question, or attach an image, text, or code file for analysis.",
+                        )
+                      : tr(
+                          "أضف مزودًا واختبره فعليًا قبل بدء المحادثة.",
+                          "Add a provider and verify it before starting a chat.",
                         )}
-                        <div className="min-w-0 pe-6">
-                          <div className="text-xs font-medium truncate">
-                            {name}
-                          </div>
-                          <div className="text-[10px] text-dark-500">
-                            {formatAttachmentSize(attachment.size || 0)}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAttachments((current) =>
-                              current.filter(
-                                (_, itemIndex) => itemIndex !== index,
-                              ),
-                            )
-                          }
-                          className="absolute top-1.5 end-1.5 icon-button !p-1"
-                          aria-label={tr(`إزالة ${name}`, `Remove ${name}`)}
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-1.5 text-[10px] text-dark-500">
-                  {tr(
-                    `${attachments.length} من ${MAX_ATTACHMENT_COUNT} • ${formatAttachmentSize(attachmentBytes)} من 3 MB`,
-                    `${attachments.length} of ${MAX_ATTACHMENT_COUNT} • ${formatAttachmentSize(attachmentBytes)} of 3 MB`,
+                  </p>
+                  {!selectedProvider ? (
+                    <Link to="/providers" className="btn btn-primary">
+                      {tr("إضافة واختبار مزود", "Add and verify a provider")}
+                    </Link>
+                  ) : (
+                    <div className="chat-starter-grid">
+                      <button type="button" onClick={() => setInput(tr("لخّص لي هذا الموضوع بخطوات واضحة", "Summarize this topic in clear steps"))}>{tr("تلخيص منظم", "Structured summary")}</button>
+                      <button type="button" onClick={() => setInput(tr("راجع هذا الكود واقترح تحسينات آمنة", "Review this code and suggest safe improvements"))}>{tr("مراجعة كود", "Code review")}</button>
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
-            <div className="flex gap-2 sm:gap-3 items-end">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={
-                  isStreaming || attachments.length >= MAX_ATTACHMENT_COUNT
-                }
-                className="btn btn-secondary h-12 w-12 p-0 shrink-0 rounded-2xl"
-                aria-label={tr(
-                  "إرفاق صورة أو ملف نصي",
-                  "Attach an image or text file",
-                )}
-                title={tr(
-                  "حتى 3 ملفات وإجمالي 3 MB",
-                  "Up to 3 files and 3 MB total",
-                )}
-              >
-                <Paperclip size={18} />
-              </button>
-              <textarea
-                id="chat-message"
-                aria-label={tr("رسالتك", "Your message")}
-                ref={textareaRef}
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void sendMessage();
-                  }
-                }}
-                placeholder={tr(
-                  "اكتب رسالتك... (Shift+Enter لسطر جديد)",
-                  "Type your message... (Shift+Enter for a new line)",
-                )}
-                className="textarea flex-1 py-3.5"
-                disabled={isStreaming}
-                rows={1}
-              />
-              {isStreaming ? (
-                <button
-                  onClick={stopGeneration}
-                  className="btn btn-danger h-12 w-12 p-0 flex items-center justify-center rounded-2xl"
-                  aria-label={tr("إيقاف التوليد", "Stop generation")}
-                >
-                  <Square size={18} />
-                </button>
-              ) : (
-                <button
-                  onClick={() => void sendMessage()}
-                  disabled={
-                    (!input.trim() && attachments.length === 0) || !currentChat
-                  }
-                  className="btn btn-primary h-12 w-12 p-0 flex items-center justify-center rounded-2xl disabled:bg-dark-200 dark:disabled:bg-dark-700"
-                  aria-label={tr("إرسال الرسالة", "Send message")}
-                >
-                  <Send size={18} />
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="text-[10px] text-dark-500 mt-2 text-center">
-            {tr(
-              "صور وملفات نصية وبرمجية حتى 5 ملفات • Enter للإرسال",
-              "Images, text, and code files — up to 5 • Press Enter to send",
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+              ) : null}
 
-function MessageAttachments({
-  attachments,
-  isUser,
-  tr,
-}: {
-  attachments: Message["attachments"];
-  isUser: boolean;
-  tr: (arabic: string, english: string) => string;
-}) {
-  if (!attachments?.length) return null;
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-      {attachments.map((attachment, index) => {
-        const name = attachment.name || tr("مرفق", "Attachment");
-        const hasPreview =
-          attachment.type === "image" && "dataUrl" in attachment;
-        return (
-          <div
-            key={`${name}-${index}`}
-            className={`min-w-0 rounded-xl border overflow-hidden ${isUser ? "bg-white/10 border-white/20" : "bg-dark-50 dark:bg-dark-900 border-dark-200 dark:border-dark-700"}`}
-          >
-            {hasPreview || (attachment.type === "image" && "downloadUrl" in attachment && attachment.downloadUrl) ? (
-              <img
-                src={hasPreview ? attachment.dataUrl : ("downloadUrl" in attachment ? attachment.downloadUrl : undefined)}
-                alt={name}
-                className="w-full h-32 object-cover"
-                loading="lazy"
-              />
-            ) : null}
-            <div className="flex items-center gap-2 p-2.5 min-w-0">
-              {attachment.type === "image" ? (
-                <ImageIcon size={15} className="shrink-0" aria-hidden="true" />
-              ) : (
-                <FileText size={15} className="shrink-0" aria-hidden="true" />
-              )}
-              <span className="text-xs truncate flex-1">{name}</span>
-              {"downloadUrl" in attachment && attachment.downloadUrl ? (
-                <a href={`${attachment.downloadUrl}?download=1`} className="text-[10px] underline shrink-0" download>{tr("تنزيل", "Download")}</a>
+              {messages.map((message) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  selectedModel={selectedModel}
+                  timeLabel={timeFormatter.format(new Date(message.createdAt))}
+                  canSaveProject={Boolean(user)}
+                  onSaveProject={(items) => void saveArtifactsAsProject(items)}
+                  tr={tr}
+                />
+              ))}
+
+              {isStreaming ? (
+                <article className="chat-message-row is-assistant" aria-live="polite" aria-busy="true">
+                  <div className="chat-message-avatar is-active"><Bot size={17} /></div>
+                  <div className="chat-message-body">
+                    <header className="chat-message-header">
+                      <strong>Moataz AI</strong>
+                      <span dir="ltr">{selectedModel}</span>
+                      <span className="chat-live-status"><i /> {streamingLabel}</span>
+                    </header>
+                    <div className="message-bubble assistant-message streaming-message">
+                      {streamingContent ? (
+                        <AiMessageContent content={streamingContent} streaming />
+                      ) : (
+                        <div className="chat-thinking-lines" aria-hidden="true"><span /><span /><span /></div>
+                      )}
+                    </div>
+                  </div>
+                </article>
               ) : null}
-              {attachment.size !== undefined ? (
-                <span className="text-[10px] opacity-70 shrink-0">
-                  {formatAttachmentSize(attachment.size)}
-                </span>
+
+              {generationError && !isStreaming ? (
+                <div className="chat-generation-error" role="alert">
+                  <CircleAlert size={20} />
+                  <div>
+                    <strong>{tr("تعذر إكمال الإجابة", "The answer could not be completed")}</strong>
+                    <p>{generationError.message}</p>
+                    <div className="chat-error-meta">
+                      {generationError.code ? <code>{generationError.code}</code> : null}
+                      {generationError.requestId ? <span dir="ltr">ID: {generationError.requestId}</span> : null}
+                    </div>
+                  </div>
+                  <button type="button" className="btn btn-secondary" onClick={() => void retryGeneration()}>
+                    <RefreshCw size={15} /> {tr("إعادة المحاولة", "Retry")}
+                  </button>
+                </div>
               ) : null}
+              <div ref={messagesEndRef} />
             </div>
           </div>
-        );
-      })}
+          {showScrollButton ? (
+            <button type="button" className="chat-scroll-latest" onClick={scrollToLatest} aria-label={tr("الانتقال إلى أحدث رسالة", "Jump to latest message")}>
+              <ArrowDown size={18} />
+            </button>
+          ) : null}
+        </div>
+        <ChatComposer
+          value={input}
+          attachments={attachments}
+          accept={ATTACHMENT_ACCEPT}
+          maxFiles={MAX_ATTACHMENT_COUNT}
+          maxBytes={MAX_ATTACHMENT_BYTES}
+          disabled={!currentChat || !selectedProvider || !selectedModel}
+          isStreaming={isStreaming}
+          onChange={setInput}
+          onFiles={addAttachments}
+          onRemoveAttachment={(index) =>
+            setAttachments((current) =>
+              current.filter((_, itemIndex) => itemIndex !== index),
+            )
+          }
+          onSend={sendMessage}
+          onStop={stopGeneration}
+          tr={tr}
+        />
+      </section>
     </div>
   );
 }

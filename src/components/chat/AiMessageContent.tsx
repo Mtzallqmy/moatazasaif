@@ -14,16 +14,20 @@ function saveText(name: string, content: string, type = 'text/plain') {
   URL.revokeObjectURL(url)
 }
 
-export default function AiMessageContent({ content, canSaveProject, onSaveProject }: { content: string; canSaveProject?: boolean; onSaveProject?: (artifacts: CodeArtifact[]) => void }) {
+export default function AiMessageContent({ content, canSaveProject, onSaveProject, streaming = false }: { content: string; canSaveProject?: boolean; onSaveProject?: (artifacts: CodeArtifact[]) => void; streaming?: boolean }) {
   const { tr } = usePreferences()
   const artifacts = extractCodeArtifacts(content)
   const copy = async (value: string) => {
-    await navigator.clipboard.writeText(value)
-    toast.success(tr('تم النسخ', 'Copied'))
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success(tr('تم النسخ', 'Copied'))
+    } catch {
+      toast.error(tr('تعذر النسخ إلى الحافظة', 'Could not copy to clipboard'))
+    }
   }
   return <>
-    <div className="prose prose-sm max-w-none dark:prose-invert"><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></div>
-    {artifacts.length > 0 && <div className="mt-4 space-y-2" aria-label={tr('الملفات البرمجية الناتجة', 'Generated code files')}>
+    <div className="prose prose-sm max-w-none dark:prose-invert chat-ai-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></div>
+    {!streaming && artifacts.length > 0 && <div className="mt-4 space-y-2" aria-label={tr('الملفات البرمجية الناتجة', 'Generated code files')}>
       {artifacts.map((artifact, index) => <div key={artifact.path + index} className="flex items-center gap-2 rounded-xl border border-dark-200 dark:border-dark-700 bg-dark-50 dark:bg-dark-900 p-2.5">
         <FileCode2 size={16} className="text-primary-500 shrink-0" />
         <span className="font-mono text-xs truncate flex-1" dir="ltr">{artifact.path}</span>
@@ -31,10 +35,10 @@ export default function AiMessageContent({ content, canSaveProject, onSaveProjec
         <button type="button" className="icon-button !p-1.5" onClick={() => saveText(artifact.path.split('/').pop() || 'file.txt', artifact.content, artifact.mimeType)} aria-label={tr('تنزيل الملف', 'Download file')}><Download size={14} /></button>
       </div>)}
     </div>}
-    <div className="mt-3 flex flex-wrap gap-2 border-t border-dark-200/70 dark:border-dark-700/70 pt-2">
+    {!streaming && <div className="mt-3 flex flex-wrap gap-2 border-t border-dark-200/70 dark:border-dark-700/70 pt-2">
       <button type="button" className="btn btn-ghost text-xs py-1.5 px-2" onClick={() => void copy(content)}><Copy size={13} /> {tr('نسخ', 'Copy')}</button>
       <button type="button" className="btn btn-ghost text-xs py-1.5 px-2" onClick={() => saveText('response.md', content, 'text/markdown')}><Download size={13} /> {tr('تنزيل', 'Download')}</button>
       {artifacts.length > 0 && canSaveProject && onSaveProject && <button type="button" className="btn btn-secondary text-xs py-1.5 px-2" onClick={() => onSaveProject(artifacts)}><FolderPlus size={13} /> {tr('حفظ كمشروع', 'Save as project')}</button>}
-    </div>
+    </div>}
   </>
 }

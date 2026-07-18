@@ -177,11 +177,21 @@ function managerRecord(row: Record<string, unknown>): ProviderManagerRecord {
 }
 
 const MANAGER_SELECT = 'id,name,type,protocol,base_url,model,encrypted_key,is_enabled,models,priority,timeout_ms,retries,max_connections,health_status,latency_ms,last_check_at,error_count,success_count,availability,last_error_code,last_error_message,circuit_state,circuit_failures,circuit_opened_at,circuit_next_retry_at,tags,capabilities'
+const LEGACY_MANAGER_SELECT = 'id,name,type,protocol,base_url,model,encrypted_key,is_enabled,models'
 
 export async function loadManagerProviders(admin: SupabaseClient, userId: string, providerId?: string) {
   let query = admin.from('providers').select(MANAGER_SELECT).eq('user_id', userId)
   if (providerId) query = query.eq('id', providerId)
-  const { data, error } = await query.order('priority', { ascending: true })
+  const initial = await query.order('priority', { ascending: true })
+  let data = initial.data as Array<Record<string, unknown>> | null
+  let error = initial.error
+  if (error && /column|schema cache/i.test(error.message || '')) {
+    let fallback = admin.from('providers').select(LEGACY_MANAGER_SELECT).eq('user_id', userId)
+    if (providerId) fallback = fallback.eq('id', providerId)
+    const fallbackResult = await fallback.order('created_at', { ascending: false })
+    data = fallbackResult.data as Array<Record<string, unknown>> | null
+    error = fallbackResult.error
+  }
   if (error) throw new ApiError(500, 'تعذر تحميل حالة المزودات', 'provider_manager_read_failed')
   return (data || []).map((row) => managerRecord(row as Record<string, unknown>))
 }

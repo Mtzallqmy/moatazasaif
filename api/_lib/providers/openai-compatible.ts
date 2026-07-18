@@ -34,7 +34,13 @@ export const openAiCompatibleAdapter: ProviderAdapter = {
         return { models: extractModelIds(payload), endpoint, httpStatus: response.status }
       } catch (error) {
         lastError = error
-        if (!(error instanceof ProviderRequestError) || ![404, 405].includes(error.details.status || 0)) throw error
+        const details = error instanceof ProviderRequestError ? error.details : undefined
+        const retryablePath = details && (
+          [404, 405].includes(details.status || 0) ||
+          details.code === 'unexpected_html_response' ||
+          details.code === 'cloudflare_challenge'
+        )
+        if (!retryablePath) throw error
       }
     }
     throw lastError || new ProviderRequestError({ message: 'لم يتم العثور على بوابة اكتشاف النماذج', code: 'models_endpoint_missing', endpoint: config.baseUrl })

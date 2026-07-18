@@ -39,6 +39,19 @@ describe('native provider adapters', () => {
     expect(result.models).toEqual(['claude-3-5-sonnet'])
   })
 
+  it('tries a conventional /v1/models path when a root models path returns HTML', async () => {
+    process.env.NODE_ENV = 'test'; process.env.ALLOW_INSECURE_PROVIDER_URLS = 'true'
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === 'http://localhost/models') return new Response('<!doctype html><html>challenge</html>', { status: 403, headers: { 'content-type': 'text/html' } })
+      return new Response(JSON.stringify({ data: [{ id: 'free-model' }] }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await openAiCompatibleAdapter.listModels({ ...base, baseUrl: 'http://localhost' })
+    expect(result.models).toEqual(['free-model'])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost/v1/models')
+  })
+
   it('streams OpenAI-compatible deltas and does not inject unsupported reasoning options', async () => {
     process.env.NODE_ENV = 'test'; process.env.ALLOW_INSECURE_PROVIDER_URLS = 'true'
     const bodyChunks = [

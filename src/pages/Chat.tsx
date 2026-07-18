@@ -61,7 +61,6 @@ import {
   listLocalMessages,
   updateLocalChat,
 } from "../lib/local-chat-store";
-import { supabase } from "../lib/supabase";
 
 type ActiveProvider = Provider | SessionProviderCredential;
 
@@ -134,22 +133,6 @@ function formatAttachmentSize(bytes: number) {
     : bytes < 1024 * 1024
       ? `${Math.ceil(bytes / 1024)} KB`
       : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-async function getAccessToken(tr: (arabic: string, english: string) => string) {
-  if (!supabase)
-    throw new Error(
-      tr(
-        "خدمة الحساب غير متاحة مؤقتًا",
-        "The account service is temporarily unavailable",
-      ),
-    );
-  const { data, error } = await supabase.auth.getSession();
-  if (error || !data.session)
-    throw new Error(
-      tr("انتهت جلسة الدخول", "Your sign-in session has expired"),
-    );
-  return data.session.access_token;
 }
 
 async function loadSavedProviders(): Promise<Provider[]> {
@@ -548,13 +531,11 @@ export default function Chat() {
       }
       const controller = new AbortController();
       abortRef.current = controller;
-      const accessToken = !isSession ? await getAccessToken(tr) : undefined;
       const result = await streamChat({
         credentialMode,
         providerId:
           credentialMode === "saved" ? selectedProvider.id : undefined,
         sessionProvider: isSession ? sessionProvider || undefined : undefined,
-        accessToken,
         model: selectedModel,
         messages: nextMessages.map((message, index) => ({
           role: message.role === "tool" ? "assistant" : message.role,

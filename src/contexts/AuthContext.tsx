@@ -30,6 +30,8 @@ interface ApiSession {
   expires_at?: number
 }
 
+interface SessionResponse { user: User }
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -38,26 +40,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
   const { tr } = usePreferences()
 
+  const persistSessionCookie = useCallback(async (session: ApiSession | null) => {
+    if (!session) return
+    await apiJson<SessionResponse>('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(session),
+    })
+  }, [])
+
   const refreshUser = useCallback(async () => {
     if (!supabase) { setUser(null); return }
     const { data, error } = await supabase.auth.getSession()
-    if (error || !data.session) { setUser(null); return }
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (!error && data.session) {
+      await persistSessionCookie({ access_token: data.session.access_token, refresh_token: data.session.refresh_token, expires_in: data.session.expires_in, expires_at: data.session.expires_at }).catch(() => undefined)
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+    }
+    try {
+      const restored = await apiJson<SessionResponse>('/api/auth/session')
+      setUser(restored.user)
+      return
+    } catch {
       try {
-        const body = await apiJson<{ user: User }>('/api/auth/me', { headers: { Authorization: `Bearer ${data.session.access_token}` } })
-        setUser(body.user)
-        return
-      } catch (requestError) {
-        const status = (requestError as Error & { status?: number }).status
-        if (status === 401 || status === 403) {
+        const local = (await supabase.auth.getSession()).data.session
+        if (local) {
+          await persistSessionCookie({ access_token: local.access_token, refresh_token: local.refresh_token, expires_in: local.expires_in, expires_at: local.expires_at })
           await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
-          setUser(null)
+          const restored = await apiJson<SessionResponse>('/api/auth/session')
+          setUser(restored.user)
           return
         }
-        if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)))
+      } catch {
+        // Fall through to the anonymous state without surfacing token details.
       }
     }
-  }, [])
+    setUser(null)
+  }, [persistSessionCookie])
 
   useEffect(() => {
     let mounted = true
@@ -65,25 +83,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const subscription = supabase?.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return
       if (!session) setUser(null)
-      else window.setTimeout(() => { if (mounted) void refreshUser() }, 0)
+      else {
+        void persistSessionCookie({ access_token: session.access_token, refresh_token: session.refresh_token, expires_in: session.expires_in, expires_at: session.expires_at }).catch(() => undefined)
+        window.setTimeout(() => { if (mounted) void refreshUser() }, 0)
+      }
     })
     return () => { mounted = false; subscription?.data.subscription.unsubscribe() }
-  }, [refreshUser])
-
-  const installSession = async (session: ApiSession | null) => {
-    if (!session || !supabase) return false
-    const { error } = await supabase.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token })
-    if (error) throw error
-    return true
-  }
+  }, [persistSessionCookie, refreshUser])
 
   const login = async (identifier: string, password: string) => {
     if (!supabase) { toast.error(tr('خدمة تسجيل الدخول غير متاحة مؤقتًا. حاول لاحقًا.', 'Sign-in is temporarily unavailable. Please try again later.')); return false }
     try {
-      const body = await apiJson<{ session: ApiSession; user: User }>('/api/auth/login', {
+      const body = await apiJson<{ user: User }>('/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier, password }),
       })
-      await installSession(body.session)
       setUser(body.user)
       toast.success(`مرحباً بك، ${body.user.name}`)
       return true
@@ -135,14 +148,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return false
       }
 
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: getAuthRedirectUrl(),
-          ...(provider === 'google' ? { queryParams: { prompt: 'select_account' } } : {}),
-        },
-      })
-      if (error) throw error
+      // The authorization code is exchanged by a Vercel Function, which sets
+      // HttpOnly Secure cookies. No provider token is exposed to the page URL.
+      const query = new URLSearchParams({ provider })
+      window.location.assign(`/api/auth/oauth-start?${query.toString()}`)
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر بدء تسجيل الدخول عبر المزود'
@@ -160,11 +169,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (name: string, email: string, password: string, username?: string) => {
     if (!supabase) { toast.error(tr('خدمة إنشاء الحساب غير متاحة مؤقتًا.', 'Account creation is temporarily unavailable.')); return false }
     try {
-      const body = await apiJson<{ session: ApiSession | null; user: User; requiresEmailConfirmation?: boolean }>('/api/auth/register', {
+      const body = await apiJson<{ user: User; requiresEmailConfirmation?: boolean }>('/api/auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password, username }),
       })
-      if (body.session) {
-        await installSession(body.session)
+      if (!body.requiresEmailConfirmation) {
         setUser(body.user)
         toast.success('تم إنشاء الحساب وتسجيل الدخول')
         return true
@@ -179,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = async () => {
+    await fetch('/api/auth/session', { method: 'DELETE', credentials: 'same-origin' }).catch(() => undefined)
     await supabase?.auth.signOut({ scope: 'local' }).catch(() => undefined)
     setUser(null)
     navigate('/')

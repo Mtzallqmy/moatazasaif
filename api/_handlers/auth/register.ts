@@ -4,6 +4,7 @@ import { ApiError, methodNotAllowed, normalizeEmail, optionalString, requireStri
 import { getAdminClient, getPublicAuthClient, publicUser } from '../../_lib/supabase.js'
 import { enforceRateLimit } from '../../_lib/rate-limit.js'
 import { isOwnerEmail } from '../../_lib/access.js'
+import { setSessionCookies } from '../../_lib/auth-session.js'
 
 const usernamePattern = /^[a-z0-9][a-z0-9._-]{2,31}$/i
 
@@ -58,13 +59,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new ApiError(500, 'تعذر إنشاء الملف الشخصي وتم التراجع عن إنشاء الحساب', 'profile_create_failed')
     }
 
+    if (data.session) setSessionCookies(res, data.session)
     return res.status(201).json({
-      session: data.session ? {
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-        expires_in: data.session.expires_in,
-        expires_at: data.session.expires_at,
-      } : null,
       user: publicUser(data.user, profile),
       requiresEmailConfirmation: !data.session,
     })

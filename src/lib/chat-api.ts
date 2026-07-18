@@ -140,14 +140,17 @@ export async function streamChat(params: StreamChatParams): Promise<{
   tokens: number;
   meta?: StreamClientEvent & { event: "meta" };
 }> {
+  if (params.credentialMode !== "session") {
+    // Refresh the access cookie server-side when a long-lived tab crosses the
+    // short access-token lifetime. No token is returned to JavaScript.
+    await fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" }).catch(() => undefined);
+  }
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (params.credentialMode !== "session") {
-    if (!params.accessToken)
-      throw new Error("جلسة الدخول مطلوبة للمزود المحفوظ");
-    headers.Authorization = `Bearer ${params.accessToken}`;
-  }
+  // Saved/platform requests authenticate through the HttpOnly cookie. The
+  // optional accessToken remains for backwards-compatible previews only.
+  if (params.accessToken) headers.Authorization = `Bearer ${params.accessToken}`;
   const response = await fetch("/api/chat", {
     method: "POST",
     headers,
@@ -180,7 +183,6 @@ export async function streamChat(params: StreamChatParams): Promise<{
     try {
       data = JSON.parse(dataLines.join("\n"));
     } catch {
-      console.error("[chat-stream-invalid-json]", { event: eventName });
       throw new ChatStreamError(
         "أعاد الخادم حدث بث غير صالح",
         "invalid_stream_json",

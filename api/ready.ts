@@ -13,6 +13,7 @@ import status from './_handlers/v1/status.js'
 import siteSettings from './_handlers/site-settings.js'
 import publicApiV1 from './_handlers/public-api-v1.js'
 import apiKeys from './_handlers/api-keys.js'
+import chats from './_handlers/chats.js'
 
 const routedHandlers: Record<string, (req: VercelRequest, res: VercelResponse) => unknown> = {
   'platform-provider': platformProvider,
@@ -25,11 +26,17 @@ const routedHandlers: Record<string, (req: VercelRequest, res: VercelResponse) =
   'site-settings': siteSettings,
   'public-api-v1': publicApiV1,
   'api-keys': apiKeys,
+  chats,
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const route = Array.isArray(req.query.route) ? req.query.route[0] : req.query.route
   if (route && routedHandlers[route]) return routedHandlers[route](req, res)
+  if (route === 'health') {
+    setJsonHeaders(res)
+    if (req.method !== 'GET') return methodNotAllowed(res, ['GET'])
+    return res.status(200).json({ status: 'ok', service: 'moataz-ai', timestamp: new Date().toISOString() })
+  }
   setJsonHeaders(res)
   if (req.method !== 'GET') return methodNotAllowed(res, ['GET'])
   try {

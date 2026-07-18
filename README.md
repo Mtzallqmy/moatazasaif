@@ -171,7 +171,7 @@ npm run check
 
 ### Provider Manager والتشخيص الإنتاجي
 
-كل مزود محفوظ يملك أولوية وإعدادات timeout/retry وعدادات نجاح/فشل وتوفرًا وحالة `healthy/degraded/offline/unknown` وحالة Circuit Breaker دائمة في Supabase. يستعمل `/api/providers/diagnostics` لاختبار المزود أو فحص صحته أو اكتشاف النماذج أو إعادة ضبط الدائرة، و`/api/providers/logs?logs=true&format=json|csv` لتصدير سجل منقح لا يحتوي مفاتيح. يعمل `/api/providers/health` عبر Vercel Cron كل ساعة عند ضبط `CRON_SECRET`، ويطبق الخادم failover للمزود المحفوظ البديل الذي يدعم النموذج نفسه قبل إرجاع خطأ للمستخدم.
+كل مزود محفوظ يملك أولوية وإعدادات timeout/retry وعدادات نجاح/فشل وتوفرًا وحالة `healthy/degraded/offline/unknown` وحالة Circuit Breaker دائمة في Supabase. يستعمل `/api/providers/diagnostics` لاختبار المزود أو فحص صحته أو اكتشاف النماذج أو إعادة ضبط الدائرة، و`/api/providers/logs?logs=true&format=json|csv` لتصدير سجل منقح لا يحتوي مفاتيح. يعمل `/api/providers/health` عبر Vercel Cron يوميًا على خطة Hobby (وعلى جدول أدق في Pro) عند ضبط `CRON_SECRET`، ويطبق الخادم failover للمزود المحفوظ البديل الذي يدعم النموذج نفسه قبل إرجاع خطأ للمستخدم.
 
 الأخطاء تصنّف إلى مصادقة، صلاحية، حصة، حد طلبات، نموذج، endpoint، شبكة، timeout أو upstream مع رسالة المزود المنقحة وHint إصلاح. لا توجد Queue محلية مزعومة؛ `queueSize` المعروض صفر لأن Vercel Functions قصيرة العمر، وللمهام الطويلة يجب إضافة طابور خارجي durable.
 

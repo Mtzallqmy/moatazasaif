@@ -72,6 +72,20 @@ export interface Provider {
   isPlatformDefault?: boolean;
   platformDailyRequestLimit?: number;
   platformDailyTokenLimit?: number;
+  priority?: number;
+  timeout?: number;
+  retries?: number;
+  maxConnections?: number;
+  healthStatus?: "healthy" | "degraded" | "offline" | "unknown";
+  latency?: number | null;
+  lastCheck?: string;
+  errorCount?: number;
+  successCount?: number;
+  availability?: number;
+  lastError?: { code?: string; message?: string };
+  circuit?: { state: "closed" | "open" | "half_open"; failures: number; nextRetryAt?: string };
+  tags?: string[];
+  capabilities?: Record<string, boolean>;
 }
 
 export interface AdminUser {

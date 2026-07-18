@@ -19,6 +19,7 @@ const Register = lazy(() => import('./pages/Register'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Chat = lazy(() => import('./pages/Chat'))
 const Providers = lazy(() => import('./pages/Providers'))
+const DeveloperDiagnostics = lazy(() => import('./pages/DeveloperDiagnostics'))
 const Integrations = lazy(() => import('./pages/Integrations'))
 const Settings = lazy(() => import('./pages/Settings'))
 const AdminUsers = lazy(() => import('./pages/AdminUsers'))
@@ -96,6 +97,7 @@ export default function App() {
     <Route path="/chat" element={<AppLayout><Chat /></AppLayout>} />
     <Route path="/chat/:chatId" element={<AppLayout><Chat /></AppLayout>} />
     <Route path="/providers" element={<AppLayout><Providers /></AppLayout>} />
+    <Route path="/developer/diagnostics" element={protectedPage(<RoleRoute roles={['owner', 'admin', 'manager']}><DeveloperDiagnostics /></RoleRoute>)} />
     <Route path="/integrations" element={protectedPage(<RoleRoute roles={INTEGRATION_ROLES}><Integrations /></RoleRoute>)} />
     <Route path="/settings" element={protectedPage(<Settings />)} />
     <Route path="/admin/users" element={protectedPage(<RoleRoute roles={['owner']}><AdminUsers /></RoleRoute>)} />

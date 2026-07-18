@@ -29,6 +29,20 @@ export function publicProvider(provider: any) {
     isPlatformDefault: provider.is_platform_default === true,
     platformDailyRequestLimit: provider.platform_daily_request_limit ?? undefined,
     platformDailyTokenLimit: provider.platform_daily_token_limit ?? undefined,
+    priority: provider.priority ?? 100,
+    timeout: provider.timeout_ms ?? 45_000,
+    retries: provider.retries ?? 2,
+    maxConnections: provider.max_connections ?? 4,
+    healthStatus: provider.health_status || 'unknown',
+    latency: provider.latency_ms ?? provider.last_latency_ms ?? null,
+    lastCheck: provider.last_check_at || provider.last_tested_at || undefined,
+    errorCount: provider.error_count ?? 0,
+    successCount: provider.success_count ?? 0,
+    availability: provider.availability ?? 1,
+    lastError: provider.last_error_code || provider.last_error_message ? { code: provider.last_error_code || undefined, message: provider.last_error_message ? redactText(String(provider.last_error_message)) : undefined } : undefined,
+    circuit: { state: provider.circuit_state || 'closed', failures: provider.circuit_failures ?? 0, nextRetryAt: provider.circuit_next_retry_at || undefined },
+    tags: Array.isArray(provider.tags) ? provider.tags : [],
+    capabilities: provider.capabilities && typeof provider.capabilities === 'object' ? provider.capabilities : {},
     createdAt: provider.created_at,
     updatedAt: provider.updated_at,
   }
@@ -44,7 +58,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const admin = getAdminClient()
 
     if (req.method === 'GET') {
-      const { data, error } = await admin.from('providers').select('id,name,type,protocol,base_url,model,is_enabled,last_tested_at,status,error_message,models,detected_protocol,diagnostic,last_latency_ms,last_http_status,is_platform_shared,is_platform_default,platform_daily_request_limit,platform_daily_token_limit,created_at,updated_at').eq('user_id', user.id).order('created_at', { ascending: false })
+      const initial = await admin.from('providers').select('id,name,type,protocol,base_url,model,is_enabled,last_tested_at,status,error_message,models,detected_protocol,diagnostic,last_latency_ms,last_http_status,is_platform_shared,is_platform_default,platform_daily_request_limit,platform_daily_token_limit,priority,timeout_ms,retries,max_connections,health_status,latency_ms,last_check_at,error_count,success_count,availability,last_error_code,last_error_message,circuit_state,circuit_failures,circuit_next_retry_at,tags,capabilities,created_at,updated_at').eq('user_id', user.id).order('priority', { ascending: true }).order('created_at', { ascending: false })
+      let data = initial.data as Array<Record<string, unknown>> | null
+      let error = initial.error
+      if (error && /column|schema cache/i.test(error.message || '')) {
+        const fallback = await admin.from('providers').select('id,name,type,protocol,base_url,model,is_enabled,last_tested_at,status,error_message,models,detected_protocol,diagnostic,last_latency_ms,last_http_status,is_platform_shared,is_platform_default,platform_daily_request_limit,platform_daily_token_limit,created_at,updated_at').eq('user_id', user.id).order('created_at', { ascending: false })
+        data = fallback.data as Array<Record<string, unknown>> | null
+        error = fallback.error
+      }
       if (error) throw new ApiError(500, 'تعذر تحميل المزودات', 'providers_read_failed')
       return res.status(200).json({ providers: (data || []).map(publicProvider) })
     }
@@ -61,6 +82,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
       if (body.model !== undefined) update.model = body.model || null
       if (body.isEnabled !== undefined) update.is_enabled = body.isEnabled
+      if (body.priority !== undefined) update.priority = body.priority
+      if (body.timeout !== undefined) update.timeout_ms = body.timeout
+      if (body.retries !== undefined) update.retries = body.retries
+      if (body.maxConnections !== undefined) update.max_connections = body.maxConnections
+      if (body.tags !== undefined) update.tags = body.tags
       if (body.name !== undefined) update.name = body.name
       if (body.protocol !== undefined) {
         // A built-in provider has one canonical protocol. Only custom rows

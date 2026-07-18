@@ -3,7 +3,8 @@
 1. افتح **SQL Editor** ونفّذ `schema.sql` كاملًا.
 2. إذا كان المشروع قائمًا على مخطط أقدم، نفّذ `migrations/20260714190000_byok_provider_protocol.sql`؛ العملية قابلة لإعادة التنفيذ وتضيف دعم `protocol` و`dahl`.
 3. نفّذ migration `migrations/20260714203349_telegram_integrations.sql` لتكامل Telegram؛ جداولها Server-only ولا تمنح المتصفح أي صلاحيات.
-4. أضف متغيرات البيئة الموجودة في `.env.example` إلى Vercel، خصوصًا `APP_URL=https://moatazasaif.vercel.app` وقيم Telegram الزمنية. إذا كان `APP_URL` مفقودًا يستخدم الخادم alias الإنتاجي كحل احتياطي، لكن يفضّل ضبطه صراحةً.
+4. نفّذ migration `migrations/20260718120000_provider_manager.sql` لإضافة أولوية المزود، مهلة وإعادة محاولة، حالة الصحة، Circuit Breaker، إحصاءات التوفر وسجل التشخيص. migration idempotent ولا تحذف بيانات المفاتيح المشفّرة.
+5. أضف متغيرات البيئة الموجودة في `.env.example` إلى Vercel، خصوصًا `APP_URL=https://moatazasaif.vercel.app` و`CRON_SECRET` وقيم Telegram الزمنية. إذا كان `APP_URL` مفقودًا يستخدم الخادم alias الإنتاجي كحل احتياطي، لكن يفضّل ضبطه صراحةً.
 5. من Supabase Dashboard → Authentication → URL Configuration اضبط Site URL على `https://moatazasaif.vercel.app` وأضف Redirect URL `https://moatazasaif.vercel.app/login`. راجع قالب Magic Link وتأكد أنه يستخدم `{{ .ConfirmationURL }}` أو `{{ .RedirectTo }}`، وليس localhost ثابتًا.
 6. لتفعيل الدخول الاجتماعي: من Authentication → Providers فعّل Google وGitHub، وضع بيانات OAuth الخاصة بهما. عنوان callback في Google/GitHub هو `https://<project-ref>.supabase.co/auth/v1/callback`. الخادم يعيد المستخدم من PKCE إلى `https://moatazasaif.vercel.app/api/auth/oauth-callback` ثم إلى `/login`؛ اسمح بهذا العنوان وبعنوان `/login` في Redirect URLs.
 7. للتهيئة الرسمية لأول مالك:

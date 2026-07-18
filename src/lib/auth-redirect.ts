@@ -1,4 +1,6 @@
-export const PRODUCTION_APP_URL = 'https://moatazalalqami.online'
+// Verified same-origin API fallback. A public HTTPS browser origin wins first,
+// so the custom domain is used automatically as soon as it serves this app.
+export const PRODUCTION_APP_URL = 'https://moatazasaif.vercel.app'
 
 function getPublicHttpsOrigin(value: string | undefined) {
   if (!value) return null

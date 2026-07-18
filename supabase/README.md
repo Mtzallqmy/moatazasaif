@@ -5,7 +5,7 @@
 3. نفّذ migration `migrations/20260714203349_telegram_integrations.sql` لتكامل Telegram؛ جداولها Server-only ولا تمنح المتصفح أي صلاحيات.
 4. نفّذ migration `migrations/20260718120000_provider_manager.sql` لإضافة أولوية المزود، مهلة وإعادة محاولة، حالة الصحة، Circuit Breaker، إحصاءات التوفر وسجل التشخيص. migration idempotent ولا تحذف بيانات المفاتيح المشفّرة.
 5. نفّذ migration `migrations/20260718212100_chat_files_and_projects.sql` لإنشاء bucket خاص للمرفقات وجداول المشاريع والملفات بسياسات ملكية وبدون منح وصول مباشر للمتصفح.
-6. أضف متغيرات البيئة الموجودة في `.env.example` إلى منصة النشر، خصوصًا `APP_URL=https://moatazalalqami.online` و`CRON_SECRET` وقيم Telegram الزمنية.
+6. أضف متغيرات البيئة الموجودة في `.env.example` إلى منصة النشر. استخدم `APP_URL=https://moatazasaif.vercel.app` حتى يُربط الدومين المخصص فعليًا بنفس المشروع، ثم غيّره إلى `https://moatazalalqami.online`.
 7. من Dashboard → Authentication → URL Configuration اضبط Site URL على `https://moatazalalqami.online` وأضف Redirect URLs للنطاق الأساسي و`www` و`https://moatazasaif.vercel.app/login`. راجع قالب Magic Link وتأكد أنه يستخدم `{{ .ConfirmationURL }}` أو `{{ .RedirectTo }}`، وليس localhost ثابتًا.
 8. لتفعيل الدخول الاجتماعي: من Authentication → Providers فعّل Google وGitHub، وضع بيانات OAuth الخاصة بهما. عنوان callback لدى المزودين هو `https://<project-ref>.supabase.co/auth/v1/callback`، بينما يحافظ التطبيق على مضيف الموقع الذي بدأ التدفق حتى اكتمال PKCE.
 9. للتهيئة الرسمية لأول مالك:

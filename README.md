@@ -134,7 +134,7 @@ npm run check
 - `SUPABASE_SERVICE_ROLE_KEY` و`ENCRYPTION_KEY` وبيانات bootstrap تبقى Server-only.
 - استخدم HTTPS لمزودات API في الإنتاج.
 - فعّل Email Auth واضبط Site URL على `https://moatazalalqami.online`، وأضف مسارات `/login` للنطاق الأساسي و`www` وalias النشر ضمن Redirect URLs.
-- اضبط `VITE_APP_URL=https://moatazalalqami.online` و`APP_URL=https://moatazalalqami.online`. يحتفظ التدفق بنفس المضيف الذي بدأ OAuth، لذلك يعمل النطاق المخصص وalias النشر دون فقد cookie التحقق.
+- إلى أن يظهر الدومين المخصص ضمن Domains لنفس مشروع النشر، أبقِ `VITE_APP_URL` و`APP_URL` على `https://moatazasaif.vercel.app`. بعد ربط الدومين غيّرهما إلى `https://moatazalalqami.online`. يحتفظ OAuth بالمضيف الذي بدأ التدفق في الحالتين.
 - لا تخلط مشاريع Supabase في متغيرات الواجهة: في Production اترك `VITE_SUPABASE_URL` و`VITE_SUPABASE_PUBLISHABLE_KEY` فقط، واحذف القيم القديمة المتعارضة من `NEXT_PUBLIC_*` و`*_ANON_KEY`. اترك `SUPABASE_SERVICE_ROLE_KEY` و`ENCRYPTION_KEY` خادميين فقط.
 - أضف متغيرات `PROVIDER_MAX_RESPONSE_BYTES` و`PROVIDER_MAX_OUTPUT_TOKENS` عند الحاجة ضمن حدود `.env.example`.
 - لا تضع مفاتيح المزودات أو `SUPABASE_SERVICE_ROLE_KEY` أو `ENCRYPTION_KEY` في أي متغير يبدأ بـ `VITE_`.

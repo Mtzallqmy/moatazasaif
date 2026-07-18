@@ -7,8 +7,8 @@ const REFRESH_COOKIE = 'moataz-refresh-token'
 const OAUTH_COOKIE = 'moataz-oauth-verifier'
 const ACCESS_MAX_AGE = 60 * 60
 const REFRESH_MAX_AGE = 60 * 60 * 24 * 30
-const CANONICAL_APP_URL = 'https://moatazalalqami.online'
-const KNOWN_APP_ORIGINS = [CANONICAL_APP_URL, 'https://www.moatazalalqami.online', 'https://moatazasaif.vercel.app'] as const
+const VERIFIED_APP_FALLBACK = 'https://moatazasaif.vercel.app'
+const KNOWN_APP_ORIGINS = ['https://moatazalalqami.online', 'https://www.moatazalalqami.online', VERIFIED_APP_FALLBACK] as const
 
 function productionCookies() {
   return process.env.NODE_ENV === 'production'
@@ -94,7 +94,7 @@ export function publicAppOrigin() {
       // Ignore malformed environment values and keep the safe production fallback.
     }
   }
-  return CANONICAL_APP_URL
+  return VERIFIED_APP_FALLBACK
 }
 
 function firstHeader(value: string | string[] | undefined) {

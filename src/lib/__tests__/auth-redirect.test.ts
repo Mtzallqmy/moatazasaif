@@ -3,7 +3,7 @@ import { resolveAuthRedirectUrl } from '../auth-redirect'
 
 describe('magic-link redirect', () => {
   it('never points a production link at localhost', () => {
-    expect(resolveAuthRedirectUrl(undefined, 'http://localhost:3000')).toBe('https://moatazalalqami.online/login')
+    expect(resolveAuthRedirectUrl(undefined, 'http://localhost:3000')).toBe('https://moatazasaif.vercel.app/login')
     expect(resolveAuthRedirectUrl('http://localhost:5173', 'https://moatazasaif.vercel.app')).toBe('https://moatazasaif.vercel.app/login')
   })
 
